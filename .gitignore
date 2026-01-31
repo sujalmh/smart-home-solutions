@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.env
+
+# Backend data
+*.db
+
+# Flutter / Dart
+.dart_tool/
+build/
+
+# Android / Gradle
+.gradle/
+local.properties
+**/build/
+**/out/
+*.iml
+
+# Logs
+*.log
