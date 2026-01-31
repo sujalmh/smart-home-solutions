@@ -12,11 +12,11 @@ class AppConfig {
   factory AppConfig.production() {
     const baseUrl = String.fromEnvironment(
       'SMART_HOME_BASE_URL',
-      defaultValue: 'http://127.0.0.1:8000',
+      defaultValue: 'https://api.sms.hebbit.tech',
     );
     const socketUrl = String.fromEnvironment(
       'SMART_HOME_SOCKET_URL',
-      defaultValue: 'http://127.0.0.1:8000',
+      defaultValue: 'https://api.sms.hebbit.tech',
     );
     const socketPath = String.fromEnvironment(
       'SMART_HOME_SOCKET_PATH',

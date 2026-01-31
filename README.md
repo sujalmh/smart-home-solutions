@@ -49,6 +49,15 @@ flutter run --no-hot -d <SIMULATOR_ID> \
 
 If you need hot reload on iOS, see the native assets note below.
 
+### Production (hosted) config
+Build the Flutter app against your hosted API domain:
+```bash
+flutter run -d <SIMULATOR_ID> \
+  --dart-define=SMART_HOME_BASE_URL=https://api.sms.hebbit.tech \
+  --dart-define=SMART_HOME_SOCKET_URL=https://api.sms.hebbit.tech \
+  --dart-define=SMART_HOME_SOCKET_PATH=/socket.io
+```
+
 ## Configuration (Flutter)
 `frontend/lib/config/app_config.dart` reads these build-time values:
 - `SMART_HOME_BASE_URL` (REST)
@@ -64,3 +73,10 @@ Workaround: run with `--no-hot` (recommended for now). The issue is tracked in F
 
 ## Parity validation
 Use `parity_checklist.md` to validate behavior against the legacy app.
+
+## Custom Domain (App Runner)
+- Domain: `https://api.sms.hebbit.tech`
+- App Runner → Custom domain → add `api.sms.hebbit.tech`
+- Complete DNS validation (CNAMEs) in your DNS host (Route 53 or external)
+- Attach/issue ACM certificate in App Runner
+- Backend CORS: set `CORS_ORIGINS=https://api.sms.hebbit.tech` in the service env
