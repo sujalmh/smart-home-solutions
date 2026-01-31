@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/selser_lbl"
+        android:id="@+id/clidev_tv"
+        android:layout_gravity="center_horizontal"
+        android:gravity="center_horizontal" />
+
+    <Spinner
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/clidev_spinner" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/pw_lbl"
+        android:id="@+id/clipw_tv"
+        android:layout_gravity="center_horizontal"
+        android:gravity="center_horizontal" />
+
+    <EditText
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/clipw_et" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/conf_lbl"
+        android:id="@+id/cliconfig_btn"
+        android:layout_gravity="center_horizontal" />
+
+</LinearLayout>

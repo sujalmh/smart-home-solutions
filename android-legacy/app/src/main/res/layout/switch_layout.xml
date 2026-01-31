@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/comp0_lbl"
+            android:id="@+id/comp00_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="15dp"
+            android:layout_marginLeft="10dp" />
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/off_lbl"
+            android:id="@+id/comp00_btn"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="15dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/comp1_lbl"
+            android:id="@+id/comp01_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="10dp" />
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/off_lbl"
+            android:id="@+id/comp01_btn"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/comp2_lbl"
+            android:id="@+id/comp02_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="10dp" />
+
+        <SeekBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/comp02_sb"
+            android:layout_marginTop="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/comp3_lbl"
+            android:id="@+id/comp03_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="10dp" />
+
+        <SeekBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/comp03_sb"
+            android:layout_marginTop="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/comp4_lbl"
+            android:id="@+id/comp04_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="10dp" />
+
+        <SeekBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/comp04_sb"
+            android:layout_marginTop="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/comp5_lbl"
+            android:id="@+id/comp05_tv"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="10dp" />
+
+        <Spinner
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/comp05_spinner"
+            android:layout_weight="1"
+            android:layout_marginTop="20dp"
+            android:layout_marginRight="10dp" />
+
+    </LinearLayout>
+
+</LinearLayout>
