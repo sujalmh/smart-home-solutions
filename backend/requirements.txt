@@ -8,3 +8,4 @@ asyncpg>=0.29
 alembic>=1.13
 passlib[bcrypt]>=1.7
 python-jose[cryptography]>=3.3
+greenlet>=3.0
