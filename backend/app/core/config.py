@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     cors_origins: str = ""
     log_level: str = "INFO"
-    socketio_path: str = "socket.io"
     database_url: str = "sqlite+aiosqlite:///./room_automation.db"
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"

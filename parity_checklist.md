@@ -3,12 +3,12 @@
 Use this checklist to confirm the Flutter + FastAPI migration preserves the
 legacy Android behavior.
 
-## Backend (FastAPI + Socket.IO)
+## Backend (FastAPI + WebSocket)
 - Health endpoint returns OK: `GET /api/health`
 - Auth register/login works with existing users (password hash verified)
-- Socket.IO events accepted: login, new user, upd client, command, status
-- command updates switch module state in DB and emits response
-- status emits staresult for requested client/module
+- WebSocket events accepted: command, status, register, staresult, response
+- command forwarded to gateway and response emitted only after device update
+- status forwarded to gateway and staresult emitted only after device update
 - staresult/response ingested from ESP32 and persisted
 - Client creation auto-seeds Comp0/Comp1/Comp2 with mode=1, status=0, value=1000
 - Device config endpoints accept payloads:
@@ -18,7 +18,7 @@ legacy Android behavior.
 - Device register endpoint persists server if missing
 
 ## ESP32 Gateway
-- Socket.IO connection stays alive and reconnects
+- WebSocket connection stays alive and reconnects
 - Receives command and applies hardware state
 - Emits response with devID/comp/mod/stat/val
 - Responds to status by emitting staresult

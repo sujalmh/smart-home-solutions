@@ -14,15 +14,16 @@ class AppConfig {
       'SMART_HOME_BASE_URL',
       defaultValue: 'https://api.sms.hebbit.tech',
     );
-    const socketUrl = String.fromEnvironment(
+    const socketUrlEnv = String.fromEnvironment(
       'SMART_HOME_SOCKET_URL',
-      defaultValue: 'https://api.sms.hebbit.tech',
+      defaultValue: '',
     );
     const socketPath = String.fromEnvironment(
       'SMART_HOME_SOCKET_PATH',
-      defaultValue: '/socket.io',
+      defaultValue: '/ws',
     );
-    return const AppConfig(
+    final socketUrl = socketUrlEnv.isEmpty ? baseUrl : socketUrlEnv;
+    return AppConfig(
       baseUrl: baseUrl,
       socketUrl: socketUrl,
       socketPath: socketPath,

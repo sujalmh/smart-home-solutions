@@ -17,7 +17,7 @@ from ..schemas.device import (
     DeviceStatusRequest,
 )
 from ..schemas.switch_module import SwitchModuleRead
-from ..socketio.server import emit_gateway_command, emit_gateway_status, is_gateway_connected
+from ..websocket.server import emit_gateway_command, emit_gateway_status, is_gateway_connected
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])

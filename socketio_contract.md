@@ -1,8 +1,19 @@
-# Socket.IO Contract (Legacy-Compatible)
+# WebSocket Contract (Legacy-Compatible)
 
 This document captures the event payloads used by the legacy Android app and
 defines the contract to preserve behavior when migrating to FastAPI + ESP32
-gateway + Flutter.
+gateway + Flutter over WebSockets.
+
+## WebSocket envelope
+All WebSocket messages use a JSON envelope:
+{
+  "event": "event_name",
+  "data": { ... }
+}
+
+The payloads below refer to the `data` object for each event.
+
+Connection endpoint: `wss://<host>/ws`
 
 ## Identifier rules
 - server_id: the SSID-like ID stored with the "RSW-" prefix (example: "RSW-1234").
@@ -10,7 +21,7 @@ gateway + Flutter.
 - wire_dev_id: the ID sent over the wire without the "RSW-" prefix.
 
 The legacy app uses dev_id.substring(4) and server_id.substring(4) when sending
-Socket.IO payloads. The backend must preserve this behavior.
+payloads. The backend must preserve this behavior.
 
 ## Shared JSON fields
 - serverID: wire_dev_id for the server (string).
@@ -29,8 +40,6 @@ Payload:
   "pword": "plaintext",
   "devID": "1234"
 }
-Ack:
-- String message containing "success" on success.
 
 ### new user
 Payload:
@@ -39,8 +48,6 @@ Payload:
   "pword": "plaintext",
   "devID": "1234"
 }
-Ack:
-- String message containing "success" on success.
 
 ### upd client
 Payload:
@@ -49,8 +56,6 @@ Payload:
   "pword": "plaintext",
   "devID": "1234"
 }
-Ack:
-- String message (legacy app logs it).
 
 ### command
 Payload:
@@ -62,8 +67,6 @@ Payload:
   "stat": 1,
   "val": 800
 }
-Ack:
-- JSON response echoing the command fields.
 
 ### status
 Payload:
@@ -75,8 +78,6 @@ Payload:
 Notes:
 - Backend forwards `command`/`status` to the master gateway only.
 - Flutter receives `response`/`staresult` only after real `res=`/`sta=` from slaves.
-Ack:
-- JSON response echoing the request fields.
 
 ## Backend to Client (Flutter)
 
@@ -106,9 +107,9 @@ Meaning:
 
 ## Master ESP32 Gateway to Backend
 
-The master ESP32 gateway connects to Socket.IO, listens for TCP from slave
-switchboards, and forwards real device updates. The backend must only emit
-`response` and `staresult` to Flutter after receiving real `res=`/`sta=`.
+The master ESP32 gateway connects over WebSocket (`/ws`), listens for TCP from
+slave switchboards, and forwards real device updates. The backend must only
+emit `response` and `staresult` to Flutter after receiving real `res=`/`sta=`.
 
 ### gateway_register (master -> backend)
 Payload:
@@ -140,7 +141,7 @@ Payload:
 }
 
 ### register (master -> backend)
-Use Socket.IO to replace local TCP register flow (from `drg=`):
+Use WebSocket to replace local TCP register flow (from `drg=`):
 Payload:
 {
   "serverID": "1234",

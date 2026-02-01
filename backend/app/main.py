@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.router import api_router
 from .core.config import settings
 from .core.logging import configure_logging
-from .socketio.server import create_socket_app
+from .websocket.server import register_websocket_routes
 from .db.init_db import init_db
 from .db.session import engine
 
@@ -38,4 +38,5 @@ def build_fastapi_app() -> FastAPI:
 
 
 fastapi_app = build_fastapi_app()
-app = create_socket_app(fastapi_app)
+register_websocket_routes(fastapi_app)
+app = fastapi_app

@@ -37,7 +37,7 @@ dependencies:
   flutter_riverpod: ^2.5.1
   google_fonts: ^6.2.1
   http: ^1.2.2
-  socket_io_client: ^2.0.3+1
+  web_socket_channel: ^2.4.0
 
 dev_dependencies:
   flutter_test:

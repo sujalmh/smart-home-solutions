@@ -1,15 +1,15 @@
 # Smart Home Solutions
 
 Full-stack migration of the legacy Android app into:
-- **Backend**: FastAPI + Socket.IO
+- **Backend**: FastAPI + WebSocket
 - **Frontend**: Flutter (iOS/Android)
-- **Gateway**: ESP32 (Arduino + Socket.IO client)
+- **Gateway**: ESP32 (Arduino + WebSocketsClient)
 
 ## Repository layout
 - `android-legacy/` legacy Android app (reference)
 - `backend/` FastAPI backend
 - `frontend/` Flutter app
-- `socketio_contract.md` legacy-compatible event contract
+- `socketio_contract.md` legacy-compatible WebSocket contract
 - `backend/esp32_gateway.md` ESP32 gateway notes
 
 ## Backend (FastAPI)
@@ -55,17 +55,17 @@ Build the Flutter app against your hosted API domain:
 flutter run -d <SIMULATOR_ID> \
   --dart-define=SMART_HOME_BASE_URL=https://api.sms.hebbit.tech \
   --dart-define=SMART_HOME_SOCKET_URL=https://api.sms.hebbit.tech \
-  --dart-define=SMART_HOME_SOCKET_PATH=/socket.io
+  --dart-define=SMART_HOME_SOCKET_PATH=/ws
 ```
 
 ## Configuration (Flutter)
 `frontend/lib/config/app_config.dart` reads these build-time values:
 - `SMART_HOME_BASE_URL` (REST)
-- `SMART_HOME_SOCKET_URL` (Socket.IO)
-- `SMART_HOME_SOCKET_PATH` (default: `/socket.io`)
+- `SMART_HOME_SOCKET_URL` (WebSocket, http/https is upgraded to ws/wss)
+- `SMART_HOME_SOCKET_PATH` (default: `/ws`)
 
 ## ESP32 Gateway
-See `backend/esp32_gateway.md` for the Arduino Socket.IO skeleton and event mapping.
+See `backend/esp32_gateway.md` for the Arduino WebSocket skeleton and event mapping.
 
 ## Native assets note (iOS)
 Current Flutter stable requires `SdkRoot` during native assets hook execution on hot reload.

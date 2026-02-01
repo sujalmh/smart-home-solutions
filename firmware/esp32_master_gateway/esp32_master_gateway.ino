@@ -2,17 +2,51 @@
 #include <WiFiClient.h>
 #include <WiFiServer.h>
 #include <HTTPClient.h>
-#include <SocketIOclient.h>
+#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 
 // WiFi credentials
 const char* WIFI_SSID = "Nuron";
 const char* WIFI_PASS = "mnbvcx12";
 
-// Backend Socket.IO
+// Backend WebSocket
 const char* SOCKET_HOST = "api.sms.hebbit.tech"; // without scheme
-const uint16_t SOCKET_PORT = 8000;
-const char* SOCKET_PATH = "/socket.io";
+const uint16_t SOCKET_PORT = 443;
+const char* SOCKET_PATH = "/ws";
+const bool SOCKET_INSECURE = true;
+const char* SOCKET_CA_CERT = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFYjCCBEqgAwIBAgIQd70NbNs2+RrqIQ/E8FjTDTANBgkqhkiG9w0BAQsFADBX
+MQswCQYDVQQGEwJCRTEZMBcGA1UEChMQR2xvYmFsU2lnbiBudi1zYTEQMA4GA1UE
+CxMHUm9vdCBDQTEbMBkGA1UEAxMSR2xvYmFsU2lnbiBSb290IENBMB4XDTIwMDYx
+OTAwMDA0MloXDTI4MDEyODAwMDA0MlowRzELMAkGA1UEBhMCVVMxIjAgBgNVBAoT
+GUdvb2dsZSBUcnVzdCBTZXJ2aWNlcyBMTEMxFDASBgNVBAMTC0dUUyBSb290IFIx
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAthECix7joXebO9y/lD63
+ladAPKH9gvl9MgaCcfb2jH/76Nu8ai6Xl6OMS/kr9rH5zoQdsfnFl97vufKj6bwS
+iV6nqlKr+CMny6SxnGPb15l+8Ape62im9MZaRw1NEDPjTrETo8gYbEvs/AmQ351k
+KSUjB6G00j0uYODP0gmHu81I8E3CwnqIiru6z1kZ1q+PsAewnjHxgsHA3y6mbWwZ
+DrXYfiYaRQM9sHmklCitD38m5agI/pboPGiUU+6DOogrFZYJsuB6jC511pzrp1Zk
+j5ZPaK49l8KEj8C8QMALXL32h7M1bKwYUH+E4EzNktMg6TO8UpmvMrUpsyUqtEj5
+cuHKZPfmghCN6J3Cioj6OGaK/GP5Afl4/Xtcd/p2h/rs37EOeZVXtL0m79YB0esW
+CruOC7XFxYpVq9Os6pFLKcwZpDIlTirxZUTQAs6qzkm06p98g7BAe+dDq6dso499
+iYH6TKX/1Y7DzkvgtdizjkXPdsDtQCv9Uw+wp9U7DbGKogPeMa3Md+pvez7W35Ei
+Eua++tgy/BBjFFFy3l3WFpO9KWgz7zpm7AeKJt8T11dleCfeXkkUAKIAf5qoIbap
+sZWwpbkNFhHax2xIPEDgfg1azVY80ZcFuctL7TlLnMQ/0lUTbiSw1nH69MG6zO0b
+9f6BQdgAmD06yK56mDcYBZUCAwEAAaOCATgwggE0MA4GA1UdDwEB/wQEAwIBhjAP
+BgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTkrysmcRorSCeFL1JmLO/wiRNxPjAf
+BgNVHSMEGDAWgBRge2YaRQ2XyolQL30EzTSo//z9SzBgBggrBgEFBQcBAQRUMFIw
+JQYIKwYBBQUHMAGGGWh0dHA6Ly9vY3NwLnBraS5nb29nL2dzcjEwKQYIKwYBBQUH
+MAKGHWh0dHA6Ly9wa2kuZ29vZy9nc3IxL2dzcjEuY3J0MDIGA1UdHwQrMCkwJ6Al
+oCOGIWh0dHA6Ly9jcmwucGtpLmdvb2cvZ3NyMS9nc3IxLmNybDA7BgNVHSAENDAy
+MAgGBmeBDAECATAIBgZngQwBAgIwDQYLKwYBBAHWeQIFAwIwDQYLKwYBBAHWeQIF
+AwMwDQYJKoZIhvcNAQELBQADggEBADSkHrEoo9C0dhemMXoh6dFSPsjbdBZBiLg9
+NR3t5P+T4Vxfq7vqfM/b5A3Ri1fyJm9bvhdGaJQ3b2t6yMAYN/olUazsaL+yyEn9
+WprKASOshIArAoyZl+tJaox118fessmXn1hIVw41oeQa1v1vg4Fv74zPl6/AhSrw
+9U5pCZEt4Wi4wStz6dTZ/CLANx8LZh1J7QJVj2fhMtfTJr9w4z30Z209fOU0iOMy
++qduBmpvvYuR7hZL6Dupszfnw0Skfths18dG9ZKb59UhvmaSGZRVbNQpsg3BZlvi
+d0lIKO2d1xozclOzgjXPYovJJIultzkMu34qQb9Sz/yilrbCgj8=
+-----END CERTIFICATE-----
+)EOF";
 
 // Master gateway identity (wire ID without RSW-)
 const char* SERVER_ID = "1234";
@@ -20,6 +54,7 @@ const char* SERVER_ID = "1234";
 // Legacy ports
 const uint16_t TCP_PORT = 6000;
 const uint16_t SLAVE_HTTP_PORT = 6000;
+const bool LOG_VERBOSE = true;
 
 // Slave mapping
 struct SlaveEntry {
@@ -32,13 +67,49 @@ SlaveEntry slaves[MAX_SLAVES];
 size_t slaveCount = 0;
 
 WiFiServer tcpServer(TCP_PORT);
-SocketIOclient socketIO;
+WebSocketsClient webSocket;
 
 String normalizeId(const String& value) {
   if (value.startsWith("RSW-")) {
     return value.substring(4);
   }
   return value;
+}
+
+void logLine(const String& message) {
+  if (!LOG_VERBOSE) {
+    return;
+  }
+  Serial.println(message);
+}
+
+const char* webSocketTypeName(WStype_t type) {
+  switch (type) {
+    case WStype_DISCONNECTED:
+      return "DISCONNECTED";
+    case WStype_CONNECTED:
+      return "CONNECTED";
+    case WStype_TEXT:
+      return "TEXT";
+    case WStype_BIN:
+      return "BIN";
+    case WStype_ERROR:
+      return "ERROR";
+    case WStype_PING:
+      return "PING";
+    case WStype_PONG:
+      return "PONG";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+String payloadToString(uint8_t* payload, size_t length) {
+  String out;
+  for (size_t i = 0; i < length; i++) {
+    out += static_cast<char>(payload[i]);
+  }
+  return out;
 }
 
 int toIntSafe(const String& value, int fallback) {
@@ -89,30 +160,37 @@ void upsertSlave(const String& id, const String& ip) {
 
 bool sendHttpGet(const String& ip, const String& path) {
   if (ip.length() == 0) {
+    logLine("HTTP skip: missing slave IP");
     return false;
   }
   WiFiClient client;
   HTTPClient http;
   String url = "http://" + ip + ":" + String(SLAVE_HTTP_PORT) + path;
+  logLine("HTTP GET -> " + url);
   if (!http.begin(client, url)) {
+    logLine("HTTP begin failed");
     return false;
   }
   int code = http.GET();
+  logLine("HTTP status: " + String(code));
   http.end();
   return code > 0 && code < 400;
 }
 
-void emitEvent(const char* eventName, JsonDocument& doc) {
-  String payload;
-  serializeJson(doc, payload);
-  String message = "[\"" + String(eventName) + "\"," + payload + "]";
-  socketIO.sendEVENT(message);
+void emitEvent(const char* eventName, const JsonDocument& doc) {
+  DynamicJsonDocument envelope(512);
+  envelope["event"] = eventName;
+  envelope["data"].set(doc.as<JsonVariantConst>());
+  String message;
+  serializeJson(envelope, message);
+  webSocket.sendTXT(message);
 }
 
 void emitGatewayRegister() {
   DynamicJsonDocument doc(256);
   doc["serverID"] = SERVER_ID;
   doc["ip"] = WiFi.localIP().toString();
+  logLine("WebSocket emit gateway_register server=" + String(SERVER_ID));
   emitEvent("gateway_register", doc);
 }
 
@@ -121,6 +199,7 @@ void emitRegister(const String& clientId, const String& ip) {
   doc["serverID"] = SERVER_ID;
   doc["clientID"] = clientId;
   doc["ip"] = ip;
+  logLine("WebSocket emit register client=" + clientId + " ip=" + ip);
   emitEvent("register", doc);
 }
 
@@ -131,6 +210,7 @@ void emitStaResult(const String& devId, const String& comp, int mod, int stat, i
   doc["mod"] = mod;
   doc["stat"] = stat;
   doc["val"] = val;
+  logLine("WebSocket emit staresult dev=" + devId + " comp=" + comp);
   emitEvent("staresult", doc);
 }
 
@@ -141,10 +221,12 @@ void emitResponse(const String& devId, const String& comp, int mod, int stat, in
   doc["mod"] = mod;
   doc["stat"] = stat;
   doc["val"] = val;
+  logLine("WebSocket emit response dev=" + devId + " comp=" + comp);
   emitEvent("response", doc);
 }
 
 void handleTcpLine(const String& line, const String& remoteIp) {
+  logLine("TCP <- " + remoteIp + " " + line);
   if (line.startsWith("drg=")) {
     String payload = line.substring(4);
     String tokens[2];
@@ -214,6 +296,7 @@ void handleTcpClients() {
 void sendCommandToSlave(const String& devId, const String& comp, int mod, int stat, int val) {
   String ip = findSlaveIp(devId);
   if (ip.length() == 0) {
+    logLine("Command skip: unknown slave " + devId);
     return;
   }
   String path = "/?usrcmd=" + devId + ";" + comp + ";" + String(mod) + ";" +
@@ -224,6 +307,7 @@ void sendCommandToSlave(const String& devId, const String& comp, int mod, int st
 void sendStatusToSlave(const String& devId, const String& comp) {
   String ip = findSlaveIp(devId);
   if (ip.length() == 0) {
+    logLine("Status skip: unknown slave " + devId);
     return;
   }
   String path = "/?usrini=" + devId + ";" + comp;
@@ -240,6 +324,7 @@ void handleCommand(JsonObject data) {
   int mod = data["mod"] | 0;
   int stat = data["stat"] | 0;
   int val = data["val"] | 0;
+  logLine("WebSocket cmd dev=" + devId + " comp=" + comp);
   sendCommandToSlave(devId, comp, mod, stat, val);
 }
 
@@ -251,36 +336,48 @@ void handleStatus(JsonObject data) {
   String devId    = normalizeId(String(data["devID"] | ""));
   String comp     = String(data["comp"] | "");
   if (comp.length() == 0) {
+    logLine("WebSocket status dev=" + devId + " comp=*" );
     sendStatusToSlave(devId, "Comp0");
     sendStatusToSlave(devId, "Comp1");
     sendStatusToSlave(devId, "Comp2");
   } else {
+    logLine("WebSocket status dev=" + devId + " comp=" + comp);
     sendStatusToSlave(devId, comp);
   }
 }
 
-void onSocketEvent(socketIOmessageType_t type, uint8_t* payload, size_t length) {
-  if (type == sIOtype_CONNECT) {
+void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
+  logLine(String("WebSocket type ") + webSocketTypeName(type));
+  if (type == WStype_CONNECTED) {
+    logLine("WebSocket connected");
     emitGatewayRegister();
     return;
   }
-  if (type != sIOtype_EVENT) {
+  if (type == WStype_DISCONNECTED) {
+    logLine("WebSocket disconnected");
+    return;
+  }
+  if (type == WStype_ERROR) {
+    logLine("WebSocket error: " + payloadToString(payload, length));
+    return;
+  }
+  if (type != WStype_TEXT) {
     return;
   }
 
   DynamicJsonDocument doc(1024);
   DeserializationError error = deserializeJson(doc, payload, length);
   if (error) {
+    logLine("WebSocket JSON parse error");
     return;
   }
-  if (!doc.is<JsonArray>()) {
-    return;
-  }
-  const char* eventName = doc[0];
-  JsonObject data = doc[1].as<JsonObject>();
+  const char* eventName = doc["event"];
+  JsonObject data = doc["data"].as<JsonObject>();
   if (!eventName || data.isNull()) {
     return;
   }
+
+  logLine("WebSocket event <- " + String(eventName));
 
   if (strcmp(eventName, "command") == 0) {
     handleCommand(data);
@@ -291,19 +388,32 @@ void onSocketEvent(socketIOmessageType_t type, uint8_t* payload, size_t length) 
 
 void setup() {
   Serial.begin(115200);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    logLine("WiFi connecting...");
   }
+  logLine("WiFi connected IP=" + WiFi.localIP().toString());
 
   tcpServer.begin();
-  socketIO.begin(SOCKET_HOST, SOCKET_PORT, SOCKET_PATH);
-  socketIO.onEvent(onSocketEvent);
-  socketIO.setReconnectInterval(5000);
+
+  if (SOCKET_INSECURE) {
+    webSocket.setInsecure();
+    logLine("WebSocket TLS insecure mode enabled");
+  } else if (strlen(SOCKET_CA_CERT) > 0) {
+    webSocket.setCACert(SOCKET_CA_CERT);
+  }
+
+  webSocket.beginSSL(SOCKET_HOST, SOCKET_PORT, SOCKET_PATH);
+  webSocket.onEvent(onWebSocketEvent);
+  webSocket.setReconnectInterval(5000);
+
+  logLine("WebSocket WSS starting...");
 }
 
 void loop() {
-  socketIO.loop();
+  webSocket.loop();
   handleTcpClients();
 }

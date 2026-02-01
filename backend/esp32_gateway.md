@@ -1,7 +1,7 @@
-# ESP32 Master Gateway (TCP + HTTP + Socket.IO)
+# ESP32 Master Gateway (TCP + HTTP + WebSocket)
 
 The master ESP32 gateway sits on the LAN, listens for legacy TCP updates from
-slave switchboards, and bridges them to the backend via Socket.IO. It also
+slave switchboards, and bridges them to the backend via WebSockets. It also
 receives backend commands and forwards them to slave ESPs over HTTP using the
 legacy `usrcmd/usrini` protocol.
 
@@ -16,12 +16,12 @@ legacy `usrcmd/usrini` protocol.
 ## Libraries
 - `WiFi.h`
 - `HTTPClient.h`
-- `socket.io-client` (Arduino)
+- `WebSocketsClient` (ArduinoWebSockets)
 - `ArduinoJson`
 
 ## Connection details
-- Backend URL: `http://YOUR_HOST:PORT`
-- Socket.IO path: `/socket.io`
+- Backend URL: `https://YOUR_HOST`
+- WebSocket path: `/ws`
 - TCP listen port: `6000`
 - Slave HTTP port: `6000` (legacy firmware default)
 
@@ -48,6 +48,6 @@ See `firmware/esp32_master_gateway/esp32_master_gateway.ino` for the Arduino
 sketch.
 
 ## Notes
-- Use wire IDs (no `RSW-`) on Socket.IO payloads.
+- Use wire IDs (no `RSW-`) on WebSocket payloads.
 - Backend is non-optimistic: Flutter gets updates only after real device state.
 - For production, use `wss://` and validate certificates.
