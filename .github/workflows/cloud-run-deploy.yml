@@ -67,7 +67,10 @@ jobs:
     needs: detect-backend-changes
     if: |
       github.ref == 'refs/heads/main' &&
-      needs.detect-backend-changes.outputs.backend_changed == 'true'
+      (
+        needs.detect-backend-changes.outputs.backend_changed == 'true' ||
+        contains(github.event.head_commit.message, '[force-deploy]')
+      )
     steps:
       - name: Checkout
         uses: actions/checkout@v4
