@@ -113,7 +113,7 @@ jobs:
               "successCodes": "200-399",
               "healthyThreshold": 2,
               "unhealthyThreshold": 2,
-              "timeoutSeconds": 5,
+              "timeoutSeconds": 9,
               "intervalSeconds": 10
             }
           }
