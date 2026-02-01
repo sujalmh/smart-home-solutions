@@ -1,109 +1,53 @@
-# ESP32 Gateway (Arduino + socket.io-client)
+# ESP32 Master Gateway (TCP + HTTP + Socket.IO)
 
-This gateway replaces the legacy phone-as-gateway behavior. The ESP32 connects
-outbound to the remote FastAPI Socket.IO server and relays status and commands.
+The master ESP32 gateway sits on the LAN, listens for legacy TCP updates from
+slave switchboards, and bridges them to the backend via Socket.IO. It also
+receives backend commands and forwards them to slave ESPs over HTTP using the
+legacy `usrcmd/usrini` protocol.
 
 ## Responsibilities
-- Connect to Wi-Fi and maintain Socket.IO connection to the remote host.
-- Receive `command` and `status` events from backend.
-- Emit `response` and `staresult` events with component state.
-- Emit `register` and `register_status` when a device is added (optional).
+- Listen on TCP port `6000` for `sta=`, `res=`, `drg=`, `dst=` from slave ESPs.
+- Parse and normalize legacy messages (wire IDs without `RSW-`).
+- Maintain mapping of `slave_id -> ip` for HTTP routing.
+- Emit `staresult`/`response` to backend only after real `sta=`/`res=`.
+- Emit `register` on `drg=` and treat `dst=` as `staresult` (ignore `END`).
+- Receive `command`/`status` from backend and forward to slaves via HTTP.
 
-## Library
+## Libraries
+- `WiFi.h`
+- `HTTPClient.h`
 - `socket.io-client` (Arduino)
-- `WebSocketsClient` (dependency of socket.io-client)
+- `ArduinoJson`
 
 ## Connection details
-- URL: `http://YOUR_HOST:PORT`
-- Path: `/socket.io` (matches backend `SOCKETIO_PATH`)
-- Transport: websocket (recommended)
+- Backend URL: `http://YOUR_HOST:PORT`
+- Socket.IO path: `/socket.io`
+- TCP listen port: `6000`
+- Slave HTTP port: `6000` (legacy firmware default)
 
 ## Event mapping
+
 Inbound from backend:
-- `command`: apply state to hardware, then emit `response` with new state
-- `status`: emit `staresult` with current state
+- `command`: translate to `/?usrcmd=client;comp;mod;stat;val;`
+- `status`: translate to `/?usrini=client;comp` (loop comps if missing)
 
 Outbound to backend:
-- `response`: result of a `command`
-- `staresult`: periodic or requested status
-- `register`: initial registration (optional)
-- `register_status`: send initial module state (optional)
+- `gateway_register`: `{ "serverID": "1234", "ip": "192.168.1.50" }`
+- `register`: `{ "serverID": "1234", "clientID": "5678", "ip": "192.168.4.20" }`
+- `staresult`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
+- `response`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
 
-Payload fields match `socketio_contract.md`.
+Legacy TCP mapping:
+- `sta=` -> `staresult`
+- `res=` -> `response`
+- `drg=` -> `register`
+- `dst=` -> `staresult` (`END` ignored)
 
-## Minimal sketch skeleton
-
-```cpp
-#include <WiFi.h>
-#include <SocketIOclient.h>
-
-SocketIOclient socketIO;
-
-const char* WIFI_SSID = "YOUR_WIFI";
-const char* WIFI_PASS = "YOUR_PASS";
-
-const char* HOST = "your.remote.host";
-const uint16_t PORT = 8000;
-const char* SOCKET_PATH = "/socket.io";
-
-String serverId = "1234"; // without RSW-
-String devId = "5678";    // without RSW-
-
-void emitResponse(const String& comp, int mod, int stat, int val) {
-  String payload = "[\"response\",{" \
-    "\"devID\":\"" + devId + "\"," \
-    "\"comp\":\"" + comp + "\"," \
-    "\"mod\":" + String(mod) + "," \
-    "\"stat\":" + String(stat) + "," \
-    "\"val\":" + String(val) + "}]";
-  socketIO.sendEVENT(payload);
-}
-
-void emitStaResult(const String& comp, int mod, int stat, int val) {
-  String payload = "[\"staresult\",{" \
-    "\"devID\":\"" + devId + "\"," \
-    "\"comp\":\"" + comp + "\"," \
-    "\"mod\":" + String(mod) + "," \
-    "\"stat\":" + String(stat) + "," \
-    "\"val\":" + String(val) + "}]";
-  socketIO.sendEVENT(payload);
-}
-
-void onSocketEvent(socketIOmessageType_t type, uint8_t* payload, size_t length) {
-  if (type != sIOtype_EVENT) {
-    return;
-  }
-
-  String msg = String((char*)payload);
-  if (msg.indexOf("\"command\"") >= 0) {
-    // TODO: parse JSON; update hardware state
-    // Example: comp="Comp0", mod=1, stat=1, val=800
-    emitResponse("Comp0", 1, 1, 800);
-  } else if (msg.indexOf("\"status\"") >= 0) {
-    // TODO: parse JSON; emit current state
-    emitStaResult("Comp0", 1, 1, 800);
-  }
-}
-
-void setup() {
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
-
-  socketIO.begin(HOST, PORT, SOCKET_PATH);
-  socketIO.onEvent(onSocketEvent);
-  socketIO.setReconnectInterval(5000);
-}
-
-void loop() {
-  socketIO.loop();
-}
-```
+## Firmware
+See `firmware/esp32_master_gateway/esp32_master_gateway.ino` for the Arduino
+sketch.
 
 ## Notes
+- Use wire IDs (no `RSW-`) on Socket.IO payloads.
+- Backend is non-optimistic: Flutter gets updates only after real device state.
 - For production, use `wss://` and validate certificates.
-- Replace placeholder JSON parsing with a small JSON parser (ArduinoJson).
-- Keep `devID` and `serverID` consistent with backend expectations.

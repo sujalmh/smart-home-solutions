@@ -2,7 +2,6 @@ import logging
 
 from jose import JWTError, jwt
 import socketio
-from sqlalchemy import select
 
 from ..core.config import settings
 from ..core.security import hash_password, verify_password
@@ -20,6 +19,8 @@ sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=settings.cors_origin_list() or "*",
 )
+
+GATEWAY_ROOM_PREFIX = "gateway:"
 
 
 def create_socket_app(other_asgi_app):
@@ -58,12 +59,42 @@ async def disconnect(sid):
     logger.info("socket disconnected sid=%s", sid)
 
 
-def _normalize_id(value: str | None) -> str | None:
-    if not value:
-        return None
+@sio.event
+async def gateway_register(sid, data):
+    payload = data if isinstance(data, dict) else {}
+    server_id = payload.get("serverID")
+    ip = payload.get("ip")
+    wire_id = _strip_prefix(server_id)
+    if not wire_id:
+        return "missing"
+
+    await sio.enter_room(sid, _gateway_room(wire_id))
+
+    async with AsyncSessionLocal() as session:
+        server = await _ensure_server(session, wire_id)
+        if server and ip:
+            server.ip = ip
+            await session.commit()
+
+    session_data = await sio.get_session(sid)
+    session_data["gateway_server_id"] = wire_id
+    await sio.save_session(sid, session_data)
+    logger.info("gateway registered sid=%s server=%s", sid, wire_id)
+    return "ok"
+
+
+def _normalize_id(value: str) -> str:
     if value.startswith("RSW-"):
         return value
     return f"RSW-{value}"
+
+
+def _strip_prefix(value: str | None) -> str | None:
+    if not value:
+        return None
+    if value.startswith("RSW-"):
+        return value[4:]
+    return value
 
 
 def _safe_int(value, default: int = 0) -> int:
@@ -73,9 +104,64 @@ def _safe_int(value, default: int = 0) -> int:
         return default
 
 
+def _gateway_room(server_id: str | None) -> str | None:
+    wire_id = _strip_prefix(server_id)
+    if not wire_id:
+        return None
+    return f"{GATEWAY_ROOM_PREFIX}{wire_id}"
+
+
+async def _emit_gateway(event: str, payload: dict, server_id: str | None) -> None:
+    room = _gateway_room(server_id)
+    if room is None:
+        return
+    await sio.emit(event, payload, room=room)
+
+
+async def emit_gateway_command(
+    server_id: str | None,
+    dev_id: str | None,
+    comp: str | None,
+    mod: int,
+    stat: int,
+    val: int,
+) -> None:
+    wire_server_id = _strip_prefix(server_id)
+    wire_dev_id = _strip_prefix(dev_id)
+    if not wire_server_id or not wire_dev_id or not comp:
+        return
+    payload = {
+        "serverID": wire_server_id,
+        "devID": wire_dev_id,
+        "comp": comp,
+        "mod": mod,
+        "stat": stat,
+        "val": val,
+    }
+    await _emit_gateway("command", payload, wire_server_id)
+
+
+async def emit_gateway_status(
+    server_id: str | None,
+    dev_id: str | None,
+    comp: str | None,
+) -> None:
+    wire_server_id = _strip_prefix(server_id)
+    wire_dev_id = _strip_prefix(dev_id)
+    if not wire_server_id or not wire_dev_id:
+        return
+    payload = {
+        "serverID": wire_server_id,
+        "devID": wire_dev_id,
+        "comp": comp,
+    }
+    await _emit_gateway("status", payload, wire_server_id)
+
+
 async def _get_server(session, server_id: str | None) -> Server | None:
     if not server_id:
         return None
+    assert server_id is not None
     full_id = _normalize_id(server_id)
     server = await session.get(Server, full_id)
     if server is None and full_id != server_id:
@@ -86,6 +172,7 @@ async def _get_server(session, server_id: str | None) -> Server | None:
 async def _get_client(session, client_id: str | None) -> Client | None:
     if not client_id:
         return None
+    assert client_id is not None
     full_id = _normalize_id(client_id)
     client = await session.get(Client, full_id)
     if client is None and full_id != client_id:
@@ -96,6 +183,7 @@ async def _get_client(session, client_id: str | None) -> Client | None:
 async def _ensure_server(session, server_id: str | None) -> Server | None:
     if not server_id:
         return None
+    assert server_id is not None
     full_id = _normalize_id(server_id)
     server = await session.get(Server, full_id)
     if server is None:
@@ -109,6 +197,7 @@ async def _ensure_server(session, server_id: str | None) -> Server | None:
 async def _ensure_client(session, client_id: str | None, server_id: str | None) -> Client | None:
     if not client_id:
         return None
+    assert client_id is not None
     full_id = _normalize_id(client_id)
     client = await session.get(Client, full_id)
     if client is None:
@@ -166,7 +255,7 @@ async def login(sid, data):
         if not user or not verify_password(pwd, user.pwd):
             return "invalid"
 
-        if dev_id:
+        if isinstance(dev_id, str) and dev_id:
             user.device_id = _normalize_id(dev_id) or user.device_id
             await session.commit()
 
@@ -181,17 +270,20 @@ async def new_user(sid, data):
     if not email or not pwd:
         return "missing"
 
+    normalized_dev_id = _normalize_id(dev_id) if isinstance(dev_id, str) and dev_id else None
+
     async with AsyncSessionLocal() as session:
         user = await session.get(User, email)
         if user is None:
             user = User(
                 email_id=email,
                 pwd=hash_password(pwd),
-                device_id=_normalize_id(dev_id) or "",
+                device_id=normalized_dev_id or "",
             )
             session.add(user)
         else:
-            user.device_id = _normalize_id(dev_id) or user.device_id
+            if normalized_dev_id:
+                user.device_id = normalized_dev_id or user.device_id
         await session.commit()
 
     return "success"
@@ -205,17 +297,19 @@ async def upd_client(sid, data):
     if not email:
         return "missing"
 
+    normalized_dev_id = _normalize_id(dev_id) if isinstance(dev_id, str) and dev_id else None
+
     async with AsyncSessionLocal() as session:
         user = await session.get(User, email)
         if user is None and pwd:
             user = User(
                 email_id=email,
                 pwd=hash_password(pwd),
-                device_id=_normalize_id(dev_id) or "",
+                device_id=normalized_dev_id or "",
             )
             session.add(user)
-        elif user is not None and dev_id:
-            user.device_id = _normalize_id(dev_id) or user.device_id
+        elif user is not None and normalized_dev_id:
+            user.device_id = normalized_dev_id or user.device_id
         if user is not None:
             await session.commit()
 
@@ -232,22 +326,11 @@ async def command(sid, data):
     stat = _safe_int(payload.get("stat"))
     val = _safe_int(payload.get("val"))
 
+    await emit_gateway_command(server_id, dev_id, comp, mod, stat, val)
+
     async with AsyncSessionLocal() as session:
         await _ensure_server(session, server_id)
-        client = await _ensure_client(session, dev_id, server_id)
-        if client:
-            await _upsert_module(session, client.client_id, comp, mod, stat, val)
-
-    await sio.emit(
-        "response",
-        {
-            "devID": dev_id,
-            "comp": comp,
-            "mod": mod,
-            "stat": stat,
-            "val": val,
-        },
-    )
+        await _ensure_client(session, dev_id, server_id)
 
     return {
         "serverID": server_id,
@@ -266,30 +349,30 @@ async def status(sid, data):
     dev_id = payload.get("devID")
     comp = payload.get("comp")
 
-    async with AsyncSessionLocal() as session:
-        client = await _get_client(session, dev_id)
-        if client is None:
-            return {"serverID": server_id, "devID": dev_id, "comp": comp}
-
-        stmt = select(SwitchModule).where(SwitchModule.client_id == client.client_id)
-        if comp:
-            stmt = stmt.where(SwitchModule.comp_id == comp)
-        result = await session.execute(stmt)
-        modules = list(result.scalars().all())
-
-    for module in modules:
-        await sio.emit(
-            "staresult",
-            {
-                "devID": module.client_id[4:] if module.client_id.startswith("RSW-") else module.client_id,
-                "comp": module.comp_id,
-                "mod": module.mode,
-                "stat": module.status,
-                "val": module.value,
-            },
-        )
+    await emit_gateway_status(server_id, dev_id, comp)
 
     return {"serverID": server_id, "devID": dev_id, "comp": comp}
+
+
+@sio.event
+async def register(sid, data):
+    payload = data if isinstance(data, dict) else {}
+    server_id = payload.get("serverID")
+    client_id = payload.get("clientID") or payload.get("devID")
+    ip = payload.get("ip")
+    if not server_id or not client_id:
+        return "missing"
+
+    async with AsyncSessionLocal() as session:
+        server = await _ensure_server(session, server_id)
+        client = await _ensure_client(session, client_id, server_id)
+        if client and ip:
+            client.ip = ip
+            if server:
+                client.server_id = server.server_id
+            await session.commit()
+
+    return "ok"
 
 
 @sio.event

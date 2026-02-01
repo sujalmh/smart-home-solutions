@@ -72,6 +72,9 @@ Payload:
   "devID": "5678",
   "comp": "Comp0"
 }
+Notes:
+- Backend forwards `command`/`status` to the master gateway only.
+- Flutter receives `response`/`staresult` only after real `res=`/`sta=` from slaves.
 Ack:
 - JSON response echoing the request fields.
 
@@ -101,13 +104,22 @@ Payload:
 Meaning:
 - Status response for status requests.
 
-## ESP32 Gateway to Backend
+## Master ESP32 Gateway to Backend
 
-The ESP32 must connect as a Socket.IO client and emit the same events that the
-legacy server emitted to the Android app. The backend should accept these
-payloads and persist them as status updates.
+The master ESP32 gateway connects to Socket.IO, listens for TCP from slave
+switchboards, and forwards real device updates. The backend must only emit
+`response` and `staresult` to Flutter after receiving real `res=`/`sta=`.
 
-### staresult
+### gateway_register (master -> backend)
+Payload:
+{
+  "serverID": "1234",
+  "ip": "192.168.1.50"
+}
+Meaning:
+- Registers the master gateway in a per-server room for routing.
+
+### staresult (master -> backend)
 Payload:
 {
   "devID": "5678",
@@ -117,7 +129,7 @@ Payload:
   "val": 800
 }
 
-### response
+### response (master -> backend)
 Payload:
 {
   "devID": "5678",
@@ -127,24 +139,17 @@ Payload:
   "val": 800
 }
 
-### register (ESP32 -> backend)
-Use Socket.IO to replace local TCP register flow:
+### register (master -> backend)
+Use Socket.IO to replace local TCP register flow (from `drg=`):
 Payload:
 {
   "serverID": "1234",
   "clientID": "5678",
   "ip": "192.168.4.20"
 }
-
-### register_status (ESP32 -> backend)
-Payload:
-{
-  "devID": "5678",
-  "comp": "Comp0",
-  "mod": 1,
-  "stat": 0,
-  "val": 1000
-}
+Notes:
+- `dst=` registration status lines are forwarded as `staresult`.
+- `END` markers are ignored except for local completion tracking.
 
 ## Backend to ESP32 Gateway
 
@@ -170,6 +175,10 @@ Payload:
 ## Legacy HTTP/TCP reference (for ESP32 firmware mapping)
 
 HTTP GET (legacy, local only):
+- /?ser= (server set)
+- /?rem=ssid;pwd; (remote config)
+- /?cli=ssid;pwd;ip (client config)
+- /?reg= (register)
 - /?usrser= (server set)
 - /?usrrem=ssid;pwd; (remote config)
 - /?usrcli=ssid;pwd;ip (client config)

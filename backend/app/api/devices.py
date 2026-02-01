@@ -17,6 +17,7 @@ from ..schemas.device import (
     DeviceStatusRequest,
 )
 from ..schemas.switch_module import SwitchModuleRead
+from ..socketio.server import emit_gateway_command, emit_gateway_status
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -42,25 +43,22 @@ async def device_command(
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
 
-    module = await session.get(
-        SwitchModule, {"client_id": payload.dev_id, "comp_id": payload.comp}
+    await emit_gateway_command(
+        payload.server_id,
+        payload.dev_id,
+        payload.comp,
+        payload.mod,
+        payload.stat,
+        payload.val,
     )
-    if module is None:
-        module = SwitchModule(
-            client_id=payload.dev_id,
-            comp_id=payload.comp,
-            mode=payload.mod,
-            status=payload.stat,
-            value=payload.val,
-        )
-        session.add(module)
-    else:
-        module.mode = payload.mod
-        module.status = payload.stat
-        module.value = payload.val
-
-    await session.commit()
-    return payload
+    return DeviceCommandResponse(
+        server_id=payload.server_id,
+        dev_id=payload.dev_id,
+        comp=payload.comp,
+        mod=payload.mod,
+        stat=payload.stat,
+        val=payload.val,
+    )
 
 
 @router.post("/{server_id}/status", response_model=list[SwitchModuleRead])
@@ -76,6 +74,8 @@ async def device_status(
     client = await session.get(Client, payload.dev_id)
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
+
+    await emit_gateway_status(payload.server_id, payload.dev_id, payload.comp)
 
     stmt = select(SwitchModule).where(SwitchModule.client_id == payload.dev_id)
     if payload.comp:
