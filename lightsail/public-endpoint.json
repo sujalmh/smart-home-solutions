@@ -1,5 +1,5 @@
 {
-  "containerName": "backend",
+  "containerName": "app",
   "containerPort": 8000,
   "healthCheck": {
     "path": "/api/health",
