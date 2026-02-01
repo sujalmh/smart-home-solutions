@@ -1,0 +1,89 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# Required IAM roles for the deployer service account (used by this workflow):
+# - roles/run.admin (project)
+# - roles/cloudbuild.builds.editor (project)
+# - roles/iam.serviceAccountUser on the Cloud Run runtime SA
+# Additionally ensure:
+# - Cloud Build SA (PROJECT_NUMBER@cloudbuild.gserviceaccount.com) has roles/artifactregistry.writer
+# - Runtime SA (e.g. PROJECT_NUMBER-compute@developer.gserviceaccount.com) has roles/artifactregistry.reader
+
+concurrency:
+  group: cloud-run-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  RUN_ENV_VARS: ${{ secrets.RUN_ENV_VARS }}
+  ALLOW_UNAUTH: ${{ vars.CLOUD_RUN_ALLOW_UNAUTH }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure required variables are set
+        shell: bash
+        run: |
+          : "${PROJECT_ID:?Set repository variable GCP_PROJECT_ID}"
+          : "${REGION:?Set repository variable GCP_REGION}"
+          : "${SERVICE:?Set repository variable CLOUD_RUN_SERVICE}"
+
+      - name: Google Auth (OIDC)
+        id: auth
+        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Google Auth (JSON key)
+        if: ${{ steps.auth.conclusion == 'skipped' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (from source)
+        id: deploy
+        shell: bash
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          REGION: ${{ env.REGION }}
+          SERVICE: ${{ env.SERVICE }}
+          RUN_ENV_VARS: ${{ env.RUN_ENV_VARS }}
+          ALLOW_UNAUTH: ${{ env.ALLOW_UNAUTH }}
+        run: |
+          set -euo pipefail
+          FLAGS=("--project=${PROJECT_ID}" "--region=${REGION}" "--platform=managed")
+          # Default to allow unauthenticated when not specified
+          if [[ -z "${ALLOW_UNAUTH:-}" || "${ALLOW_UNAUTH,,}" == "true" ]]; then
+            FLAGS+=("--allow-unauthenticated")
+          fi
+          if [[ -n "${RUN_ENV_VARS:-}" ]]; then
+            FLAGS+=("--update-env-vars=${RUN_ENV_VARS}")
+          fi
+          gcloud run deploy "${SERVICE}" --source . "${FLAGS[@]}"
+          URL=$(gcloud run services describe "${SERVICE}" --region "${REGION}" --format 'value(status.url)')
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Deployment Complete
+        run: echo "Deployment finished."

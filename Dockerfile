@@ -13,13 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Dependencies
-COPY requirements.txt ./
+COPY backend/requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# App code
-COPY app ./app
+# Application code
+COPY backend/app ./app
 
-EXPOSE 8000
+# Cloud Run provides the listening port in $PORT (default 8080)
+EXPOSE 8080
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use sh to expand $PORT at runtime
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
