@@ -41,7 +41,6 @@ jobs:
 
       # Prefer OIDC. Provide AWS_ROLE_TO_ASSUME secret with the role ARN.
       - name: Configure AWS credentials (OIDC)
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -49,7 +48,6 @@ jobs:
 
       # Fallback to long-lived keys if OIDC not configured.
       - name: Configure AWS credentials (access keys)
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
