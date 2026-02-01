@@ -113,8 +113,8 @@ jobs:
               "successCodes": "200-399",
               "healthyThreshold": 2,
               "unhealthyThreshold": 2,
-              "timeoutSeconds": 2,
-              "intervalSeconds": 5
+              "timeoutSeconds": 10,
+              "intervalSeconds": 10
             }
           }
           EOF
