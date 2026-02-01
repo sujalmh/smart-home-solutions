@@ -1,0 +1,12 @@
+{
+  "containerName": "backend",
+  "containerPort": 8000,
+  "healthCheck": {
+    "path": "/api/health",
+    "successCodes": "200-499",
+    "timeoutSeconds": 2,
+    "intervalSeconds": 5,
+    "healthyThreshold": 2,
+    "unhealthyThreshold": 3
+  }
+}

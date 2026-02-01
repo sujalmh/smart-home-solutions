@@ -74,9 +74,24 @@ Workaround: run with `--no-hot` (recommended for now). The issue is tracked in F
 ## Parity validation
 Use `parity_checklist.md` to validate behavior against the legacy app.
 
-## Custom Domain (App Runner)
+## Hosting (AWS Lightsail)
+- Create a Lightsail Container Service once:
+  - Name: `smart-home` (example)
+  - Power: `nano`, Scale: `1`
+  - Public endpoint: later via deployment (health: `/api/health`)
+- Set GitHub Secrets for the workflow:
+  - `AWS_REGION` (e.g. `us-east-1`)
+  - `AWS_ROLE_TO_ASSUME` (OIDC role with Lightsail permissions)
+  - `LIGHTSAIL_SERVICE_NAME` (e.g. `smart-home`)
+  - `JWT_SECRET_KEY` (random string)
+- On push to `main`, `.github/workflows/deploy-lightsail.yml` will:
+  - Build `backend/` image
+  - Push to Lightsail registry
+  - Deploy to the container service with env vars & health checks
+
+### Custom Domain (Lightsail)
 - Domain: `https://api.sms.hebbit.tech`
-- App Runner → Custom domain → add `api.sms.hebbit.tech`
-- Complete DNS validation (CNAMEs) in your DNS host (Route 53 or external)
-- Attach/issue ACM certificate in App Runner
-- Backend CORS: set `CORS_ORIGINS=https://api.sms.hebbit.tech` in the service env
+- Lightsail → Networking → Create certificate → `api.sms.hebbit.tech`
+- Add DNS validation CNAMEs in your DNS (Lightsail DNS zone or external)
+- In the Container Service, attach the certificate to the public endpoint
+- Backend CORS: ensure `CORS_ORIGINS=https://api.sms.hebbit.tech`

@@ -1,0 +1,123 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # for OIDC (recommended)
+  contents: read
+
+concurrency:
+  group: lightsail-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Set these in GitHub Repository Variables (Settings → Variables → Actions)
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  SERVICE_NAME: ${{ vars.LIGHTSAIL_SERVICE_NAME }}
+  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
+  CONTAINER_PORT: ${{ vars.CONTAINER_PORT }}
+  HEALTHCHECK_PATH: ${{ vars.HEALTHCHECK_PATH }}
+  # Optional: JSON map of env vars for your container, e.g. {"NODE_ENV":"production"}
+  ENV_JSON: ${{ secrets.LIGHTSAIL_ENV_JSON }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure required variables are set
+        shell: bash
+        run: |
+          : "${AWS_REGION:?Set repository variable AWS_REGION}"
+          : "${SERVICE_NAME:?Set repository variable LIGHTSAIL_SERVICE_NAME}"
+          : "${CONTAINER_NAME:=app}"
+          : "${CONTAINER_PORT:=8000}"
+          : "${HEALTHCHECK_PATH:=/api/health}"
+
+      # Prefer OIDC. Provide AWS_ROLE_TO_ASSUME secret with the role ARN.
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Fallback to long-lived keys if OIDC not configured.
+      - name: Configure AWS credentials (access keys)
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        shell: bash
+        run: |
+          docker build -t app:${GITHUB_SHA} backend
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Push image to Lightsail
+        id: push
+        shell: bash
+        run: |
+          OUTPUT=$(aws lightsail push-container-image \
+            --service-name "$SERVICE_NAME" \
+            --label "$CONTAINER_NAME" \
+            --image "app:${GITHUB_SHA}")
+          echo "$OUTPUT"
+          IMAGE_REF=$(echo "$OUTPUT" | jq -r '.image')
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Create deployment spec
+        shell: bash
+        run: |
+          IMAGE_REF="${{ steps.push.outputs.image_ref }}"
+          ENV_JSON_VALUE="${ENV_JSON:-{}}"
+          if ! echo "$ENV_JSON_VALUE" | jq -e . >/dev/null 2>&1; then
+            echo "LIGHTSAIL_ENV_JSON is not valid JSON; using {}"
+            ENV_JSON_VALUE="{}"
+          fi
+          cat > containers.json <<EOF
+          {
+            "$CONTAINER_NAME": {
+              "image": "$IMAGE_REF",
+              "ports": { "$CONTAINER_PORT": "HTTP" },
+              "environment": $ENV_JSON_VALUE
+            }
+          }
+          EOF
+          cat > public-endpoint.json <<EOF
+          {
+            "containerName": "$CONTAINER_NAME",
+            "containerPort": $CONTAINER_PORT,
+            "healthCheck": {
+              "path": "$HEALTHCHECK_PATH",
+              "successCodes": "200-399",
+              "healthyThreshold": 2,
+              "unhealthyThreshold": 2,
+              "timeoutSeconds": 2,
+              "intervalSeconds": 5
+            }
+          }
+          EOF
+          echo "containers.json:" && cat containers.json
+          echo "public-endpoint.json:" && cat public-endpoint.json
+
+      - name: Deploy to Lightsail
+        shell: bash
+        run: |
+          aws lightsail create-container-service-deployment \
+            --service-name "$SERVICE_NAME" \
+            --containers file://containers.json \
+            --public-endpoint file://public-endpoint.json
