@@ -79,7 +79,11 @@ jobs:
             --label "$CONTAINER_NAME" \
             --image "app:${GITHUB_SHA}")
           echo "$OUTPUT"
-          IMAGE_REF=$(echo "$OUTPUT" | jq -r '.image')
+          IMAGE_REF=$(echo "$OUTPUT" | sed -n 's/.*Refer to this image as ":\(.*\)".*/\1/p')
+          if [ -z "$IMAGE_REF" ]; then
+            echo "❌ Failed to extract Lightsail image reference"
+            exit 1
+          fi
           echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
 
       - name: Create deployment spec
