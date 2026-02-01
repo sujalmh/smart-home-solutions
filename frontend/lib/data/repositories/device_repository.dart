@@ -78,4 +78,9 @@ class DeviceRepository {
       'server_id': serverId,
     });
   }
+
+  Future<bool> verifyGateway({required String serverId}) async {
+    final response = await api.getJson('/api/devices/$serverId/gateway/status');
+    return response['online'] == true;
+  }
 }

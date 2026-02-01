@@ -32,6 +32,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _showMessage('Registration request sent.');
   }
 
+  Future<void> _verifyGateway() async {
+    final serverId = _serverController.text.trim();
+    if (serverId.isEmpty) {
+      _showMessage('Enter a server device ID.');
+      return;
+    }
+
+    final online = await ref
+        .read(deviceRepositoryProvider)
+        .verifyGateway(serverId: serverId);
+    _showMessage(online ? 'Gateway is online.' : 'Gateway is offline.');
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -58,6 +71,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
             const SizedBox(height: 20),
             FilledButton(onPressed: _register, child: const Text('Register')),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _verifyGateway,
+              child: const Text('Verify Gateway'),
+            ),
           ],
         ),
       ),

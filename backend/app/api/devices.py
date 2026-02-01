@@ -17,7 +17,7 @@ from ..schemas.device import (
     DeviceStatusRequest,
 )
 from ..schemas.switch_module import SwitchModuleRead
-from ..socketio.server import emit_gateway_command, emit_gateway_status
+from ..socketio.server import emit_gateway_command, emit_gateway_status, is_gateway_connected
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -51,14 +51,7 @@ async def device_command(
         payload.stat,
         payload.val,
     )
-    return DeviceCommandResponse(
-        server_id=payload.server_id,
-        dev_id=payload.dev_id,
-        comp=payload.comp,
-        mod=payload.mod,
-        stat=payload.stat,
-        val=payload.val,
-    )
+    return DeviceCommandResponse.model_validate(payload.model_dump())
 
 
 @router.post("/{server_id}/status", response_model=list[SwitchModuleRead])
@@ -81,7 +74,8 @@ async def device_status(
     if payload.comp:
         stmt = stmt.where(SwitchModule.comp_id == payload.comp)
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    modules = list(result.scalars().all())
+    return [SwitchModuleRead.model_validate(module) for module in modules]
 
 
 @router.post("/{server_id}/config/server", response_model=DeviceConfigResponse)
@@ -169,3 +163,8 @@ async def register_device(
         await session.commit()
 
     return DeviceConfigResponse(status="ok")
+
+
+@router.get("/{server_id}/gateway/status")
+async def gateway_status(server_id: str) -> dict:
+    return {"online": is_gateway_connected(server_id)}

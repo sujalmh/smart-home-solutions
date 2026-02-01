@@ -118,6 +118,20 @@ async def _emit_gateway(event: str, payload: dict, server_id: str | None) -> Non
     await sio.emit(event, payload, room=room)
 
 
+def is_gateway_connected(server_id: str | None) -> bool:
+    room = _gateway_room(server_id)
+    if room is None:
+        return False
+    manager = getattr(sio, "manager", None)
+    if manager is None:
+        return False
+    try:
+        participants = manager.get_participants("/", room)
+    except Exception:
+        return False
+    return any(True for _ in participants)
+
+
 async def emit_gateway_command(
     server_id: str | None,
     dev_id: str | None,
