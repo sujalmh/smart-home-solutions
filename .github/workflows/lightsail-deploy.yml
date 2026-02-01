@@ -66,12 +66,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Install lightsailctl
-        shell: bash
         run: |
-          curl -Lo lightsailctl.tgz https://lightsailctl.us-east-1.amazonaws.com/latest/linux-amd64/lightsailctl.tgz
-          tar -xzf lightsailctl.tgz
-          sudo mv lightsailctl /usr/local/bin/
-          lightsailctl --version
+          curl "https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl" -o /usr/local/bin/lightsailctl
+          sudo chmod +x /usr/local/bin/lightsailctl
 
       - name: Push image to Lightsail
         id: push
