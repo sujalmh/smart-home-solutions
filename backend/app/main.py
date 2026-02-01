@@ -16,9 +16,9 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db(engine)
+    import asyncio
+    asyncio.create_task(init_db(engine))
     yield
-
 
 def build_fastapi_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -38,4 +38,9 @@ def build_fastapi_app() -> FastAPI:
 
 
 fastapi_app = build_fastapi_app()
+
+@fastapi_app.get("/api/health")
+async def health():
+    return {"status": "ok"}
+
 app = create_socket_app(fastapi_app)
