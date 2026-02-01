@@ -399,13 +399,6 @@ void setup() {
 
   tcpServer.begin();
 
-  if (SOCKET_INSECURE) {
-    webSocket.setInsecure();
-    logLine("WebSocket TLS insecure mode enabled");
-  } else if (strlen(SOCKET_CA_CERT) > 0) {
-    webSocket.setCACert(SOCKET_CA_CERT);
-  }
-
   webSocket.beginSSL(SOCKET_HOST, SOCKET_PORT, SOCKET_PATH);
   webSocket.onEvent(onWebSocketEvent);
   webSocket.setReconnectInterval(5000);
