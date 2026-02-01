@@ -34,36 +34,32 @@ jobs:
     outputs:
       backend_changed: ${{ steps.changes.outputs.backend_changed }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # IMPORTANT for git diff
 
       - name: Detect backend changes
         id: changes
-        shell: bash
         run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            BASE="${{ github.event.before }}"
-          else
-            if git rev-parse HEAD^ >/dev/null 2>&1; then
-              BASE="HEAD^"
-            else
-              BASE=""
-            fi
+          BASE="${{ github.event.before }}"
+
+          # Handle first commit / edge cases
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "First commit detected, forcing deploy"
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
-          if [[ -z "${BASE}" || "${BASE}" == "0000000000000000000000000000000000000000" ]]; then
-            DIFF_CMD=(git diff --name-only --root "${GITHUB_SHA}" -- "backend/")
-          else
-            DIFF_CMD=(git diff --name-only "${BASE}" "${GITHUB_SHA}" -- "backend/")
-          fi
+          echo "Diff base: $BASE"
+          git diff --name-only "$BASE" "$GITHUB_SHA"
 
-          if "${DIFF_CMD[@]}" | grep -q .; then
-            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          if git diff --name-only "$BASE" "$GITHUB_SHA" -- backend/ | grep .; then
+            echo "Backend changes detected"
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
           else
-            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No backend changes detected"
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
           fi
 
   deploy:
