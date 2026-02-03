@@ -7,6 +7,7 @@ legacy `usrcmd/usrini` protocol.
 
 ## Responsibilities
 - Listen on TCP port `6000` for `sta=`, `res=`, `drg=`, `dst=` from slave ESPs.
+- Listen on UDP port `6000` for `drg=` discovery broadcasts.
 - Parse and normalize legacy messages (wire IDs without `RSW-`).
 - Maintain mapping of `slave_id -> ip` for HTTP routing.
 - Require binding before accepting `drg=` updates (discover only).

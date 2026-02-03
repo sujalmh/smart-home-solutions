@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <WiFiUdp.h>
 
 // Wi-Fi credentials
 const char* WIFI_SSID = "Nuron";
@@ -8,6 +9,8 @@ const char* WIFI_PASS = "mnbvcx12";
 // Master TCP target
 const char* MASTER_HOST = "master-gateway.local";
 const uint16_t MASTER_PORT = 6000;
+const uint16_t UDP_DISCOVERY_PORT = 6000;
+const unsigned long DISCOVERY_INTERVAL_MS = 12000;
 
 // Slave identity (wire ID without RSW-)
 const char* SLAVE_ID = "5678";
@@ -16,10 +19,12 @@ const char* SLAVE_ID = "5678";
 const uint8_t RELAY_PINS[4] = {D1, D2, D5, D6};
 
 ESP8266WebServer server(80);
+WiFiUDP udp;
 
 int relayState[4] = {0, 0, 0, 0};
 unsigned long lastRegistrationMs = 0;
 const unsigned long REGISTRATION_INTERVAL_MS = 15000;
+unsigned long lastDiscoveryMs = 0;
 IPAddress masterIp;
 unsigned long lastResolveMs = 0;
 const unsigned long RESOLVE_INTERVAL_MS = 10000;
@@ -72,6 +77,14 @@ bool sendLinesToMaster(const String* lines, size_t count) {
   client.stop();
   Serial.println("Master TCP closed.");
   return true;
+}
+
+void sendUdpDiscovery() {
+  String line = "drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString();
+  udp.beginPacket(IPAddress(255, 255, 255, 255), UDP_DISCOVERY_PORT);
+  udp.write(reinterpret_cast<const uint8_t*>(line.c_str()), line.length());
+  udp.endPacket();
+  Serial.println("UDP -> " + line);
 }
 
 void sendRegistration() {
@@ -190,6 +203,14 @@ void ensureRegistration() {
   }
 }
 
+void ensureDiscovery() {
+  unsigned long now = millis();
+  if (now - lastDiscoveryMs >= DISCOVERY_INTERVAL_MS) {
+    sendUdpDiscovery();
+    lastDiscoveryMs = now;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Slave booting...");
@@ -206,6 +227,10 @@ void setup() {
     Serial.println("WiFi connecting...");
   }
   Serial.println("WiFi connected IP=" + WiFi.localIP().toString());
+
+  udp.begin(UDP_DISCOVERY_PORT);
+  sendUdpDiscovery();
+  lastDiscoveryMs = millis();
 
   server.on("/", HTTP_GET, []() {
     if (server.hasArg("usrcmd")) {
@@ -226,4 +251,5 @@ void setup() {
 void loop() {
   server.handleClient();
   ensureRegistration();
+  ensureDiscovery();
 }

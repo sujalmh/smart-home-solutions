@@ -56,6 +56,8 @@ const uint16_t TCP_PORT = 6000;
 const uint16_t SLAVE_HTTP_PORT = 6000;
 const bool LOG_VERBOSE = true;
 const bool REQUIRE_BINDING = true;
+const uint16_t UDP_DISCOVERY_PORT = 6000;
+const unsigned long SEEN_TTL_MS = 30000;
 
 // Slave mapping
 struct SlaveEntry {
@@ -74,10 +76,12 @@ size_t pendingCount = 0;
 static const size_t MAX_SEEN = 32;
 String seenIds[MAX_SEEN];
 String seenIps[MAX_SEEN];
+unsigned long seenAt[MAX_SEEN];
 size_t seenCount = 0;
 
 WiFiServer tcpServer(TCP_PORT);
 WebSocketsClient webSocket;
+WiFiUDP udp;
 
 String normalizeId(const String& value) {
   if (value.startsWith("RSW-")) {
@@ -268,14 +272,17 @@ void emitSlaveSeen(const String& clientId, const String& ip) {
   emitEvent("slave_seen", doc);
 }
 
-void recordSeen(const String& clientId, const String& ip) {
+void recordSeen(const String& clientId, const String& ip, bool forceEmit) {
   if (clientId.length() == 0) {
     return;
   }
+  unsigned long now = millis();
   for (size_t i = 0; i < seenCount; i++) {
     if (seenIds[i] == clientId) {
       seenIps[i] = ip;
-      if (webSocket.isConnected()) {
+      bool shouldEmit = forceEmit || (now - seenAt[i] >= SEEN_TTL_MS);
+      seenAt[i] = now;
+      if (shouldEmit && webSocket.isConnected()) {
         emitSlaveSeen(clientId, ip);
       }
       return;
@@ -284,6 +291,7 @@ void recordSeen(const String& clientId, const String& ip) {
   if (seenCount < MAX_SEEN) {
     seenIds[seenCount] = clientId;
     seenIps[seenCount] = ip;
+    seenAt[seenCount] = now;
     seenCount++;
   }
   if (webSocket.isConnected()) {
@@ -298,6 +306,33 @@ void flushSeen() {
   for (size_t i = 0; i < seenCount; i++) {
     emitSlaveSeen(seenIds[i], seenIps[i]);
   }
+}
+
+void handleUdpDiscovery() {
+  int packetSize = udp.parsePacket();
+  if (packetSize <= 0) {
+    return;
+  }
+  char buffer[128];
+  int len = udp.read(buffer, sizeof(buffer) - 1);
+  if (len <= 0) {
+    return;
+  }
+  buffer[len] = '\0';
+  String line = String(buffer);
+  line.trim();
+  if (!line.startsWith("drg=")) {
+    return;
+  }
+  String payload = line.substring(4);
+  String tokens[2];
+  int count = splitTokens(payload, ';', tokens, 2);
+  if (count < 2) {
+    return;
+  }
+  String clientId = normalizeId(tokens[0]);
+  String ip = tokens[1];
+  recordSeen(clientId, ip, false);
 }
 
 void emitStaResult(const String& devId, const String& comp, int mod, int stat, int val) {
@@ -331,7 +366,7 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     if (count >= 2) {
       String clientId = normalizeId(tokens[0]);
       String ip = tokens[1];
-      recordSeen(clientId, ip);
+      recordSeen(clientId, ip, true);
       bool canBind = !REQUIRE_BINDING || isPendingSlave(clientId) || isKnownSlave(clientId);
       if (!canBind) {
         logLine("Bind required, ignoring drg for " + clientId);
@@ -553,6 +588,7 @@ void setup() {
   logLine("WiFi connected IP=" + WiFi.localIP().toString());
 
   tcpServer.begin();
+  udp.begin(UDP_DISCOVERY_PORT);
 
   webSocket.beginSSL(SOCKET_HOST, SOCKET_PORT, SOCKET_PATH);
   webSocket.onEvent(onWebSocketEvent);
@@ -564,4 +600,5 @@ void setup() {
 void loop() {
   webSocket.loop();
   handleTcpClients();
+  handleUdpDiscovery();
 }
