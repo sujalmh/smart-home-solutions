@@ -10,7 +10,7 @@ legacy Android behavior.
 - command forwarded to gateway and response emitted only after device update
 - status forwarded to gateway and staresult emitted only after device update
 - staresult/response ingested from ESP32 and persisted
-- Client creation auto-seeds Comp0/Comp1/Comp2 with mode=1, status=0, value=1000
+- Client creation auto-seeds Comp0/Comp1/Comp2/Comp3 with mode=1, status=0, value=1000
 - Device config endpoints accept payloads:
   - /api/devices/{server_id}/config/server
   - /api/devices/{server_id}/config/remote

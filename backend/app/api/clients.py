@@ -50,7 +50,7 @@ async def create_client(
     session.add(client)
     await session.flush()
 
-    default_modules = ["Comp0", "Comp1", "Comp2"]
+    default_modules = ["Comp0", "Comp1", "Comp2", "Comp3"]
     for comp_id in default_modules:
         session.add(
             SwitchModule(

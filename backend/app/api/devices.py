@@ -37,6 +37,26 @@ def _default_server_pwd(server_id: str) -> str:
     return server_id
 
 
+async def _seed_default_modules(session: AsyncSession, client_id: str) -> None:
+    default_modules = ["Comp0", "Comp1", "Comp2", "Comp3"]
+    result = await session.execute(
+        select(SwitchModule.comp_id).where(SwitchModule.client_id == client_id)
+    )
+    existing = {row[0] for row in result.all()}
+    for comp_id in default_modules:
+        if comp_id in existing:
+            continue
+        session.add(
+            SwitchModule(
+                client_id=client_id,
+                comp_id=comp_id,
+                mode=1,
+                status=0,
+                value=1000,
+            )
+        )
+
+
 def _normalize_id(value: str) -> str:
     if value.startswith("RSW-"):
         return value
@@ -164,18 +184,7 @@ async def config_client(
         session.add(client)
         await session.flush()
 
-        default_modules = ["Comp0", "Comp1", "Comp2"]
-        for comp_id in default_modules:
-            session.add(
-                SwitchModule(
-                    client_id=normalized_client_id,
-                    comp_id=comp_id,
-                    mode=1,
-                    status=0,
-                    value=1000,
-                )
-            )
-
+        await _seed_default_modules(session, normalized_client_id)
         await session.commit()
 
     return DeviceConfigResponse(status="ok")
@@ -240,6 +249,8 @@ async def gateway_bind(
             ip="",
         )
         session.add(client)
+        await session.flush()
+        await _seed_default_modules(session, normalized_client_id)
     else:
         client.server_id = normalized_server_id
     await session.commit()
