@@ -6,7 +6,7 @@ const char* WIFI_SSID = "Nuron";
 const char* WIFI_PASS = "mnbvcx12";
 
 // Master TCP target
-const char* MASTER_IP = "192.168.1.50";
+const char* MASTER_IP = "192.168.0.120";
 const uint16_t MASTER_PORT = 6000;
 
 // Slave identity (wire ID without RSW-)
@@ -16,7 +16,6 @@ const char* SLAVE_ID = "5678";
 const uint8_t RELAY_PINS[4] = {D1, D2, D5, D6};
 
 ESP8266WebServer server(80);
-WiFiClient masterClient;
 
 int relayState[4] = {0, 0, 0, 0};
 unsigned long lastRegistrationMs = 0;
@@ -35,26 +34,43 @@ void applyRelayState(int index, int stat) {
   digitalWrite(RELAY_PINS[index], relayState[index] ? LOW : HIGH);
 }
 
-void sendLine(const String& line) {
-  if (!masterClient.connected()) {
-    return;
+bool sendLinesToMaster(const String* lines, size_t count) {
+  WiFiClient client;
+  Serial.println("Connecting to master TCP...");
+  if (!client.connect(MASTER_IP, MASTER_PORT)) {
+    Serial.println("Master TCP connect failed.");
+    return false;
   }
-  masterClient.print(line + "\n");
+  Serial.println("Master TCP connected.");
+  for (size_t i = 0; i < count; i++) {
+    Serial.println("TCP -> " + lines[i]);
+    client.print(lines[i] + "\n");
+  }
+  client.flush();
+  client.stop();
+  Serial.println("Master TCP closed.");
+  return true;
 }
 
 void sendRegistration() {
-  sendLine("drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString());
+  Serial.println("Registering with master...");
+  String lines[5];
+  lines[0] = "drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString();
   for (int i = 0; i < 4; i++) {
     String comp = "Comp" + String(i);
     String payload = String(SLAVE_ID) + ";" + comp + ";M;" + String(relayState[i]) + ";0";
-    sendLine("dst=" + payload);
+    lines[i + 1] = "dst=" + payload;
+  }
+  if (sendLinesToMaster(lines, 5)) {
+    lastRegistrationMs = millis();
   }
 }
 
 void sendStatus(int index) {
   String comp = "Comp" + String(index);
   String payload = String(SLAVE_ID) + ";" + comp + ";M;" + String(relayState[index]) + ";0";
-  sendLine("sta=" + payload);
+  String line = "sta=" + payload;
+  sendLinesToMaster(&line, 1);
 }
 
 void handleCommand() {
@@ -144,24 +160,17 @@ void handleStatusRequest() {
   server.send(200, "text/plain", "ok");
 }
 
-void ensureMasterConnection() {
-  if (masterClient.connected()) {
-    unsigned long now = millis();
-    if (now - lastRegistrationMs >= REGISTRATION_INTERVAL_MS) {
-      sendRegistration();
-      lastRegistrationMs = now;
-    }
-    return;
-  }
-  masterClient.stop();
-  if (masterClient.connect(MASTER_IP, MASTER_PORT)) {
+void ensureRegistration() {
+  unsigned long now = millis();
+  if (now - lastRegistrationMs >= REGISTRATION_INTERVAL_MS) {
+    Serial.println("Re-registering with master...");
     sendRegistration();
-    lastRegistrationMs = millis();
   }
 }
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Slave booting...");
 
   for (int i = 0; i < 4; i++) {
     pinMode(RELAY_PINS[i], OUTPUT);
@@ -172,7 +181,9 @@ void setup() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    Serial.println("WiFi connecting...");
   }
+  Serial.println("WiFi connected IP=" + WiFi.localIP().toString());
 
   server.on("/", HTTP_GET, []() {
     if (server.hasArg("usrcmd")) {
@@ -187,10 +198,10 @@ void setup() {
   });
 
   server.begin();
-  ensureMasterConnection();
+  sendRegistration();
 }
 
 void loop() {
   server.handleClient();
-  ensureMasterConnection();
+  ensureRegistration();
 }

@@ -46,6 +46,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     await ref
         .read(deviceRepositoryProvider)
         .bindSlave(serverId: widget.serverId, clientId: clientId);
+    ref.refresh(clientsProvider(widget.serverId));
     await _loadSeen();
   }
 
@@ -53,6 +54,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     await ref
         .read(deviceRepositoryProvider)
         .unbindSlave(serverId: widget.serverId, clientId: clientId);
+    ref.refresh(clientsProvider(widget.serverId));
   }
 
   Future<void> _requestStatus(String clientId) async {

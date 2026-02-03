@@ -71,6 +71,11 @@ static const size_t MAX_PENDING = 32;
 String pendingSlaves[MAX_PENDING];
 size_t pendingCount = 0;
 
+static const size_t MAX_SEEN = 32;
+String seenIds[MAX_SEEN];
+String seenIps[MAX_SEEN];
+size_t seenCount = 0;
+
 WiFiServer tcpServer(TCP_PORT);
 WebSocketsClient webSocket;
 
@@ -254,6 +259,38 @@ void emitSlaveSeen(const String& clientId, const String& ip) {
   emitEvent("slave_seen", doc);
 }
 
+void recordSeen(const String& clientId, const String& ip) {
+  if (clientId.length() == 0) {
+    return;
+  }
+  for (size_t i = 0; i < seenCount; i++) {
+    if (seenIds[i] == clientId) {
+      seenIps[i] = ip;
+      if (webSocket.isConnected()) {
+        emitSlaveSeen(clientId, ip);
+      }
+      return;
+    }
+  }
+  if (seenCount < MAX_SEEN) {
+    seenIds[seenCount] = clientId;
+    seenIps[seenCount] = ip;
+    seenCount++;
+  }
+  if (webSocket.isConnected()) {
+    emitSlaveSeen(clientId, ip);
+  }
+}
+
+void flushSeen() {
+  if (!webSocket.isConnected()) {
+    return;
+  }
+  for (size_t i = 0; i < seenCount; i++) {
+    emitSlaveSeen(seenIds[i], seenIps[i]);
+  }
+}
+
 void emitStaResult(const String& devId, const String& comp, int mod, int stat, int val) {
   DynamicJsonDocument doc(256);
   doc["devID"] = devId;
@@ -285,7 +322,7 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     if (count >= 2) {
       String clientId = normalizeId(tokens[0]);
       String ip = tokens[1];
-      emitSlaveSeen(clientId, ip);
+      recordSeen(clientId, ip);
       bool canBind = !REQUIRE_BINDING || isPendingSlave(clientId) || isKnownSlave(clientId);
       if (!canBind) {
         logLine("Bind required, ignoring drg for " + clientId);
@@ -454,6 +491,7 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   if (type == WStype_CONNECTED) {
     logLine("WebSocket connected");
     emitGatewayRegister();
+    flushSeen();
     return;
   }
   if (type == WStype_DISCONNECTED) {

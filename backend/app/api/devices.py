@@ -223,7 +223,13 @@ async def gateway_bind(
     normalized_client_id = _normalize_id(payload.client_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        server = Server(
+            server_id=normalized_server_id,
+            pwd=_default_server_pwd(normalized_server_id),
+            ip="192.168.4.100",
+        )
+        session.add(server)
+        await session.commit()
 
     client = await session.get(Client, normalized_client_id)
     if client is None:
@@ -234,7 +240,9 @@ async def gateway_bind(
             ip="0.0.0.0",
         )
         session.add(client)
-        await session.commit()
+    else:
+        client.server_id = normalized_server_id
+    await session.commit()
 
     await emit_gateway_bind(normalized_server_id, normalized_client_id)
     return DeviceConfigResponse(status="ok")
@@ -250,7 +258,13 @@ async def gateway_unbind(
     normalized_client_id = _normalize_id(payload.client_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        server = Server(
+            server_id=normalized_server_id,
+            pwd=_default_server_pwd(normalized_server_id),
+            ip="192.168.4.100",
+        )
+        session.add(server)
+        await session.commit()
 
     await emit_gateway_unbind(normalized_server_id, normalized_client_id)
     return DeviceConfigResponse(status="ok")
