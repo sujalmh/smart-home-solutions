@@ -36,6 +36,34 @@ class SwitchModulesController
     required int status,
     required int value,
   }) async {
+    final modules = state.value ?? [];
+    final exists = modules.any((module) => module.compId == compId);
+    final updated = modules
+        .map(
+          (module) => module.compId == compId
+              ? SwitchModule(
+                  clientId: module.clientId,
+                  compId: module.compId,
+                  mode: mode,
+                  status: status,
+                  value: value,
+                )
+              : module,
+        )
+        .toList();
+    if (!exists) {
+      updated.add(
+        SwitchModule(
+          clientId: clientId,
+          compId: compId,
+          mode: mode,
+          status: status,
+          value: value,
+        ),
+      );
+    }
+    state = AsyncValue.data(updated);
+
     await deviceRepository.sendCommand(
       DeviceCommand(
         serverId: serverId,
@@ -45,6 +73,12 @@ class SwitchModulesController
         stat: status,
         val: value,
       ),
+    );
+
+    await deviceRepository.requestStatus(
+      serverId: serverId,
+      devId: clientId,
+      comp: compId,
     );
   }
 
