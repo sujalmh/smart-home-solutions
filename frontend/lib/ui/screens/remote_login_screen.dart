@@ -87,73 +87,111 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
     final serversAsync = ref.watch(serversProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Remote Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Authenticate with your remote account.',
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 12),
-            serversAsync.when(
-              data: (servers) {
-                final items = servers
-                    .map(
-                      (server) => DropdownMenuItem<String>(
-                        value: server.serverId,
-                        child: Text(server.serverId),
-                      ),
-                    )
-                    .toList();
-                return DropdownButtonFormField<String>(
-                  value: _selectedServer,
-                  decoration: const InputDecoration(labelText: 'Server ID'),
-                  items: items,
-                  onChanged: (value) => setState(() => _selectedServer = value),
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(),
+      appBar: AppBar(title: const Text('Remote Access')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Secure your gateway access.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
-              error: (_, __) => const Text('Unable to load servers.'),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: authState.isLoading ? null : _login,
-                    child: const Text('Login'),
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                'Use your account to manage devices remotely.',
+                style: TextStyle(color: Colors.black.withOpacity(0.6)),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE5ECEB)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: authState.isLoading ? null : _register,
-                    child: const Text('Register'),
-                  ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(labelText: 'Password'),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 12),
+                    serversAsync.when(
+                      data: (servers) {
+                        final items = servers
+                            .map(
+                              (server) => DropdownMenuItem<String>(
+                                value: server.serverId,
+                                child: Text(
+                                  'Gateway ${_displayId(server.serverId)}',
+                                ),
+                              ),
+                            )
+                            .toList();
+                        return DropdownButtonFormField<String>(
+                          value: _selectedServer,
+                          decoration: const InputDecoration(
+                            labelText: 'Gateway',
+                          ),
+                          items: items,
+                          onChanged: (value) =>
+                              setState(() => _selectedServer = value),
+                        );
+                      },
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: LinearProgressIndicator(),
+                      ),
+                      error: (_, __) => const Text('Unable to load gateways.'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: authState.isLoading ? null : _login,
+                      child: const Text('Login'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: authState.isLoading ? null : _register,
+                      child: const Text('Register'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+String _displayId(String value) {
+  if (value.startsWith('RSW-')) {
+    return value.substring(4);
+  }
+  return value;
 }

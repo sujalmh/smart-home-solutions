@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/status.dart' as status;
+import 'package:web_socket_channel/status.dart' as ws_status;
 
 class SocketClient {
   final String url;
@@ -34,7 +34,7 @@ class SocketClient {
     _reconnectTimer = null;
     _subscription?.cancel();
     _subscription = null;
-    _channel?.sink.close(status.goingAway);
+    _channel?.sink.close(ws_status.goingAway);
     _channel = null;
   }
 

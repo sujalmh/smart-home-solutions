@@ -1,63 +1,85 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/providers.dart';
 import 'config_screen.dart';
 
-class SelectDeviceScreen extends StatefulWidget {
+class SelectDeviceScreen extends ConsumerWidget {
   static const routeName = '/select-device';
 
   const SelectDeviceScreen({super.key});
 
   @override
-  State<SelectDeviceScreen> createState() => _SelectDeviceScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final serversAsync = ref.watch(serversProvider);
 
-class _SelectDeviceScreenState extends State<SelectDeviceScreen> {
-  final _deviceController = TextEditingController();
-
-  @override
-  void dispose() {
-    _deviceController.dispose();
-    super.dispose();
-  }
-
-  void _continue() {
-    final deviceId = _deviceController.text.trim();
-    if (deviceId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter a device SSID.')));
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ConfigScreen(deviceId: deviceId)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Select Device')),
+      appBar: AppBar(
+        title: const Text('Choose Gateway'),
+        actions: [
+          IconButton(
+            onPressed: () => ref.refresh(serversProvider),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter the device SSID (RSW-xxxx).',
-              style: TextStyle(fontSize: 16),
+              'Select a gateway to configure.',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _deviceController,
-              decoration: const InputDecoration(labelText: 'Device SSID'),
+            Expanded(
+              child: serversAsync.when(
+                data: (servers) {
+                  if (servers.isEmpty) {
+                    return const Center(
+                      child: Text('No gateways discovered yet.'),
+                    );
+                  }
+                  return ListView.separated(
+                    itemCount: servers.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, index) {
+                      final server = servers[index];
+                      return ListTile(
+                        tileColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Text('Gateway ${_displayId(server.serverId)}'),
+                        subtitle: Text('IP ${server.ip}'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ConfigScreen(deviceId: server.serverId),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) =>
+                    const Center(child: Text('Unable to load gateways.')),
+              ),
             ),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: _continue, child: const Text('Continue')),
           ],
         ),
       ),
     );
   }
+}
+
+String _displayId(String value) {
+  if (value.startsWith('RSW-')) {
+    return value.substring(4);
+  }
+  return value;
 }

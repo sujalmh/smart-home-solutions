@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/switch_module.dart';
@@ -62,29 +63,39 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
           ),
         ],
       ),
-      body: modulesAsync.when(
-        data: (modules) {
-          if (modules.isEmpty) {
-            return const Center(child: Text('No modules available.'));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: modules.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, index) {
-              final module = modules[index];
-              return _SwitchCard(
-                module: module,
-                onModeChanged: (mode) => _sendUpdate(module, mode: mode),
-                onStatusChanged: (status) =>
-                    _sendUpdate(module, status: status),
-                onValueChanged: (value) => _sendUpdate(module, value: value),
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(child: Text('Unable to load modules.')),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: modulesAsync.when(
+          data: (modules) {
+            if (modules.isEmpty) {
+              return const Center(child: Text('No modules available.'));
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.all(18),
+              itemCount: modules.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (_, index) {
+                final module = modules[index];
+                return _SwitchCard(
+                  module: module,
+                  onModeChanged: (mode) => _sendUpdate(module, mode: mode),
+                  onStatusChanged: (status) =>
+                      _sendUpdate(module, status: status),
+                  onValueChanged: (value) => _sendUpdate(module, value: value),
+                );
+              },
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) =>
+              const Center(child: Text('Unable to load modules.')),
+        ),
       ),
     );
   }
@@ -124,26 +135,21 @@ class _SwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isAuto = module.mode == 1;
     final isOn = module.status == 1;
+    final accent = isOn ? const Color(0xFF0F7B7A) : const Color(0xFF8E9A9A);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5ECEB)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             module.compId,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           Row(
@@ -173,7 +179,10 @@ class _SwitchCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text('Level ${module.value}'),
+          Text(
+            'Level ${module.value}',
+            style: TextStyle(fontWeight: FontWeight.w600, color: accent),
+          ),
           Slider(
             min: 0,
             max: 1000,
@@ -184,11 +193,4 @@ class _SwitchCard extends StatelessWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

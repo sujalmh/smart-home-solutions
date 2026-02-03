@@ -61,7 +61,9 @@ async def _ensure_server(session, server_id: str | None) -> Server | None:
     return server
 
 
-async def _ensure_client(session, client_id: str | None, server_id: str | None) -> Client | None:
+async def _ensure_client(
+    session, client_id: str | None, server_id: str | None
+) -> Client | None:
     if not client_id:
         return None
     full_id = _normalize_id(client_id)
@@ -293,6 +295,13 @@ async def _handle_register(data: dict) -> None:
                 client.server_id = server.server_id
             await session.commit()
 
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not isinstance(ip, str):
+        ip = ""
+    if wire_server_id and wire_client_id:
+        await ws_manager.record_seen(wire_server_id, wire_client_id, ip)
+
 
 async def _handle_slave_seen(data: dict) -> None:
     server_id = data.get("serverID")
@@ -384,7 +393,9 @@ def register_websocket_routes(app: FastAPI) -> None:
         token = websocket.query_params.get("token")
         if token:
             try:
-                jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+                jwt.decode(
+                    token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+                )
             except JWTError:
                 await websocket.accept()
                 await websocket.close(code=1008)

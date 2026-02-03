@@ -12,15 +12,26 @@ class SmartHomeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseTheme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E7C7B)),
+      colorScheme: const ColorScheme.light(
+        primary: Color(0xFF0F7B7A),
+        secondary: Color(0xFFEDA84A),
+        surface: Color(0xFFFDFBF7),
+        background: Color(0xFFF7F4EE),
+      ),
       useMaterial3: true,
     );
 
     return MaterialApp(
       title: 'Smart Home',
       theme: baseTheme.copyWith(
-        textTheme: GoogleFonts.manropeTextTheme(baseTheme.textTheme),
-        scaffoldBackgroundColor: const Color(0xFFF6F3ED),
+        textTheme: GoogleFonts.spaceGroteskTextTheme(baseTheme.textTheme),
+        scaffoldBackgroundColor: const Color(0xFFF7F4EE),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF7F4EE),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: false,
+        ),
       ),
       home: const HomeScreen(),
       routes: {

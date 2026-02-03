@@ -72,6 +72,13 @@ final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
   return DeviceRepository(api: ref.watch(apiClientProvider));
 });
 
+final gatewayStatusProvider = FutureProvider.family<bool, String>((
+  ref,
+  serverId,
+) async {
+  return ref.watch(deviceRepositoryProvider).verifyGateway(serverId: serverId);
+});
+
 final switchModulesProvider =
     StateNotifierProvider.family<
       SwitchModulesController,
