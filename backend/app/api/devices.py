@@ -45,9 +45,10 @@ def _normalize_id(value: str) -> str:
 
 async def _get_client_any(session: AsyncSession, client_id: str) -> Client | None:
     normalized = _normalize_id(client_id)
+    raw = client_id[4:] if client_id.startswith("RSW-") else client_id
     client = await session.get(Client, normalized)
-    if client is None and normalized != client_id:
-        client = await session.get(Client, client_id)
+    if client is None and raw != normalized:
+        client = await session.get(Client, raw)
     return client
 
 
@@ -78,13 +79,19 @@ async def device_command(
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceCommandResponse:
     normalized_server_id = _normalize_id(server_id)
-    normalized_dev_id = _normalize_id(payload.dev_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        server = Server(
+            server_id=normalized_server_id,
+            pwd=_default_server_pwd(normalized_server_id),
+            ip="",
+        )
+        session.add(server)
+        await session.commit()
 
-    client = await _get_client_any(session, normalized_dev_id)
+    client = await _get_client_any(session, payload.dev_id)
     if client is None:
+        normalized_dev_id = _normalize_id(payload.dev_id)
         client = Client(
             client_id=normalized_dev_id,
             server_id=normalized_server_id,
@@ -95,6 +102,7 @@ async def device_command(
         await session.flush()
         await _seed_default_modules(session, normalized_dev_id)
         await session.commit()
+    normalized_dev_id = _normalize_id(payload.dev_id)
 
     await emit_gateway_command(
         normalized_server_id,
@@ -123,13 +131,19 @@ async def device_status(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SwitchModuleRead]:
     normalized_server_id = _normalize_id(server_id)
-    normalized_dev_id = _normalize_id(payload.dev_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        server = Server(
+            server_id=normalized_server_id,
+            pwd=_default_server_pwd(normalized_server_id),
+            ip="",
+        )
+        session.add(server)
+        await session.commit()
 
-    client = await _get_client_any(session, normalized_dev_id)
+    client = await _get_client_any(session, payload.dev_id)
     if client is None:
+        normalized_dev_id = _normalize_id(payload.dev_id)
         client = Client(
             client_id=normalized_dev_id,
             server_id=normalized_server_id,
@@ -140,6 +154,7 @@ async def device_status(
         await session.flush()
         await _seed_default_modules(session, normalized_dev_id)
         await session.commit()
+    normalized_dev_id = _normalize_id(payload.dev_id)
 
     await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
 
@@ -266,7 +281,7 @@ async def gateway_bind(
         session.add(server)
         await session.commit()
 
-    client = await _get_client_any(session, normalized_client_id)
+    client = await _get_client_any(session, payload.client_id)
     if client is None:
         client = Client(
             client_id=normalized_client_id,

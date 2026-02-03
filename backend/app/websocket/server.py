@@ -6,6 +6,7 @@ import logging
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
+from sqlalchemy import select
 from starlette.websockets import WebSocketState
 
 from ..core.config import settings
@@ -277,6 +278,21 @@ async def _handle_gateway_register(websocket: WebSocket, data: dict) -> None:
         if server and isinstance(ip, str) and ip:
             server.ip = ip
             await session.commit()
+
+        normalized_server_id = _normalize_id(wire_id)
+        result = await session.execute(
+            select(Client.client_id).where(
+                Client.server_id.in_([normalized_server_id, wire_id])
+            )
+        )
+        client_ids = [row[0] for row in result.all()]
+
+    for client_id in client_ids:
+        wire_client_id = _strip_prefix(client_id)
+        if not wire_client_id:
+            continue
+        payload = {"serverID": wire_id, "clientID": wire_client_id}
+        await ws_manager.send_to_gateway(wire_id, "bind_slave", payload)
     logger.info("gateway registered server=%s", wire_id)
 
 

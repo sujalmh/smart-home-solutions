@@ -53,7 +53,7 @@ const char* SERVER_ID = "1234";
 
 // Legacy ports
 const uint16_t TCP_PORT = 6000;
-const uint16_t SLAVE_HTTP_PORT = 6000;
+const uint16_t SLAVE_HTTP_PORT = 80;
 const bool LOG_VERBOSE = true;
 const bool REQUIRE_BINDING = true;
 const uint16_t UDP_DISCOVERY_PORT = 6000;
