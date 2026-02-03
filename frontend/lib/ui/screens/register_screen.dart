@@ -14,10 +14,12 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _serverController = TextEditingController();
+  final _clientController = TextEditingController();
 
   @override
   void dispose() {
     _serverController.dispose();
+    _clientController.dispose();
     super.dispose();
   }
 
@@ -43,6 +45,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         .read(deviceRepositoryProvider)
         .verifyGateway(serverId: serverId);
     _showMessage(online ? 'Gateway is online.' : 'Gateway is offline.');
+  }
+
+  Future<void> _bindSlave() async {
+    final serverId = _serverController.text.trim();
+    final clientId = _clientController.text.trim();
+    if (serverId.isEmpty || clientId.isEmpty) {
+      _showMessage('Enter server ID and slave ID.');
+      return;
+    }
+
+    await ref
+        .read(deviceRepositoryProvider)
+        .bindSlave(serverId: serverId, clientId: clientId);
+    _showMessage('Bind request sent to gateway.');
   }
 
   void _showMessage(String message) {
@@ -75,6 +91,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             OutlinedButton(
               onPressed: _verifyGateway,
               child: const Text('Verify Gateway'),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _clientController,
+              decoration: const InputDecoration(labelText: 'Slave ID'),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _bindSlave,
+              child: const Text('Bind Slave'),
             ),
           ],
         ),

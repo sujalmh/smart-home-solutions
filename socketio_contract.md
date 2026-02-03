@@ -79,6 +79,15 @@ Notes:
 - Backend forwards `command`/`status` to the master gateway only.
 - Flutter receives `response`/`staresult` only after real `res=`/`sta=` from slaves.
 
+### bind_slave
+Payload:
+{
+  "serverID": "1234",
+  "clientID": "5678"
+}
+Meaning:
+- Requests the master gateway to bind/allow a slave ID.
+
 ## Backend to Client (Flutter)
 
 ### response
@@ -151,6 +160,17 @@ Payload:
 Notes:
 - `dst=` registration status lines are forwarded as `staresult`.
 - `END` markers are ignored except for local completion tracking.
+
+## Backend to Master ESP32 Gateway
+
+### bind_slave
+Payload:
+{
+  "serverID": "1234",
+  "clientID": "5678"
+}
+Meaning:
+- Allows/binds the slave to the master. The master should accept `drg=` from the slave.
 
 ## Backend to ESP32 Gateway
 

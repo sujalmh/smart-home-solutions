@@ -220,6 +220,15 @@ async def emit_gateway_status(
     await ws_manager.send_to_gateway(wire_server_id, "status", payload)
 
 
+async def emit_gateway_bind(server_id: str | None, client_id: str | None) -> None:
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return
+    payload = {"serverID": wire_server_id, "clientID": wire_client_id}
+    await ws_manager.send_to_gateway(wire_server_id, "bind_slave", payload)
+
+
 def is_gateway_connected(server_id: str | None) -> bool:
     wire_server_id = _strip_prefix(server_id)
     if not wire_server_id:
@@ -319,6 +328,8 @@ async def _handle_message(websocket: WebSocket, message: str) -> None:
         await _handle_command(data)
     elif event == "status":
         await _handle_status_request(data)
+    elif event == "bind_slave":
+        await emit_gateway_bind(data.get("serverID"), data.get("clientID"))
 
 
 def register_websocket_routes(app: FastAPI) -> None:

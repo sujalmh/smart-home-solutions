@@ -55,6 +55,7 @@ const char* SERVER_ID = "1234";
 const uint16_t TCP_PORT = 6000;
 const uint16_t SLAVE_HTTP_PORT = 6000;
 const bool LOG_VERBOSE = true;
+const bool REQUIRE_BINDING = true;
 
 // Slave mapping
 struct SlaveEntry {
@@ -65,6 +66,10 @@ struct SlaveEntry {
 static const size_t MAX_SLAVES = 32;
 SlaveEntry slaves[MAX_SLAVES];
 size_t slaveCount = 0;
+
+static const size_t MAX_PENDING = 32;
+String pendingSlaves[MAX_PENDING];
+size_t pendingCount = 0;
 
 WiFiServer tcpServer(TCP_PORT);
 WebSocketsClient webSocket;
@@ -141,6 +146,43 @@ String findSlaveIp(const String& id) {
     }
   }
   return String();
+}
+
+bool isKnownSlave(const String& id) {
+  for (size_t i = 0; i < slaveCount; i++) {
+    if (slaves[i].id == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool isPendingSlave(const String& id) {
+  for (size_t i = 0; i < pendingCount; i++) {
+    if (pendingSlaves[i] == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void addPendingSlave(const String& id) {
+  if (id.length() == 0 || isPendingSlave(id)) {
+    return;
+  }
+  if (pendingCount < MAX_PENDING) {
+    pendingSlaves[pendingCount++] = id;
+  }
+}
+
+void removePendingSlave(const String& id) {
+  for (size_t i = 0; i < pendingCount; i++) {
+    if (pendingSlaves[i] == id) {
+      pendingSlaves[i] = pendingSlaves[pendingCount - 1];
+      pendingCount--;
+      return;
+    }
+  }
 }
 
 void upsertSlave(const String& id, const String& ip) {
@@ -234,6 +276,14 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     if (count >= 2) {
       String clientId = normalizeId(tokens[0]);
       String ip = tokens[1];
+      bool canBind = !REQUIRE_BINDING || isPendingSlave(clientId) || isKnownSlave(clientId);
+      if (!canBind) {
+        logLine("Bind required, ignoring drg for " + clientId);
+        return;
+      }
+      if (isPendingSlave(clientId)) {
+        removePendingSlave(clientId);
+      }
       upsertSlave(clientId, ip);
       emitRegister(clientId, ip);
     }
@@ -249,6 +299,10 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     }
 
     String clientId = normalizeId(tokens[0]);
+    if (REQUIRE_BINDING && !isKnownSlave(clientId)) {
+      logLine("Ignoring update from unbound slave " + clientId);
+      return;
+    }
     if (clientId.indexOf("END") >= 0) {
       return;
     }
@@ -346,6 +400,25 @@ void handleStatus(JsonObject data) {
   }
 }
 
+void handleBindSlave(JsonObject data) {
+  String serverId = normalizeId(String(data["serverID"] | ""));
+  if (serverId.length() > 0 && serverId != SERVER_ID) {
+    return;
+  }
+  String clientId = normalizeId(String(data["clientID"] | ""));
+  if (clientId.length() == 0) {
+    return;
+  }
+  addPendingSlave(clientId);
+  logLine("Bind requested for slave " + clientId);
+
+  String ip = findSlaveIp(clientId);
+  if (ip.length() > 0) {
+    removePendingSlave(clientId);
+    emitRegister(clientId, ip);
+  }
+}
+
 void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   logLine(String("WebSocket type ") + webSocketTypeName(type));
   if (type == WStype_CONNECTED) {
@@ -383,6 +456,8 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     handleCommand(data);
   } else if (strcmp(eventName, "status") == 0) {
     handleStatus(data);
+  } else if (strcmp(eventName, "bind_slave") == 0) {
+    handleBindSlave(data);
   }
 }
 

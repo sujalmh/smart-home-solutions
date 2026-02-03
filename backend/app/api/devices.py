@@ -7,6 +7,7 @@ from ..models.client import Client
 from ..models.server import Server
 from ..models.switch_module import SwitchModule
 from ..schemas.device import (
+    DeviceBindRequest,
     DeviceClientConfigRequest,
     DeviceCommandRequest,
     DeviceCommandResponse,
@@ -17,7 +18,12 @@ from ..schemas.device import (
     DeviceStatusRequest,
 )
 from ..schemas.switch_module import SwitchModuleRead
-from ..websocket.server import emit_gateway_command, emit_gateway_status, is_gateway_connected
+from ..websocket.server import (
+    emit_gateway_bind,
+    emit_gateway_command,
+    emit_gateway_status,
+    is_gateway_connected,
+)
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -168,3 +174,28 @@ async def register_device(
 @router.get("/{server_id}/gateway/status")
 async def gateway_status(server_id: str) -> dict:
     return {"online": is_gateway_connected(server_id)}
+
+
+@router.post("/{server_id}/gateway/bind", response_model=DeviceConfigResponse)
+async def gateway_bind(
+    server_id: str,
+    payload: DeviceBindRequest,
+    session: AsyncSession = Depends(get_async_session),
+) -> DeviceConfigResponse:
+    server = await session.get(Server, server_id)
+    if server is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+
+    client = await session.get(Client, payload.client_id)
+    if client is None:
+        client = Client(
+            client_id=payload.client_id,
+            server_id=server_id,
+            pwd=payload.client_id,
+            ip="0.0.0.0",
+        )
+        session.add(client)
+        await session.commit()
+
+    await emit_gateway_bind(server_id, payload.client_id)
+    return DeviceConfigResponse(status="ok")

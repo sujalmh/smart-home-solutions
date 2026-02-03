@@ -45,5 +45,9 @@ class DeviceRegisterRequest(BaseModel):
     server_id: str
 
 
+class DeviceBindRequest(BaseModel):
+    client_id: str
+
+
 class DeviceConfigResponse(BaseModel):
     status: str

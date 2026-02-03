@@ -9,9 +9,11 @@ legacy `usrcmd/usrini` protocol.
 - Listen on TCP port `6000` for `sta=`, `res=`, `drg=`, `dst=` from slave ESPs.
 - Parse and normalize legacy messages (wire IDs without `RSW-`).
 - Maintain mapping of `slave_id -> ip` for HTTP routing.
+- Optionally require binding before accepting `drg=`.
 - Emit `staresult`/`response` to backend only after real `sta=`/`res=`.
 - Emit `register` on `drg=` and treat `dst=` as `staresult` (ignore `END`).
 - Receive `command`/`status` from backend and forward to slaves via HTTP.
+ - Accept `bind_slave` from backend to allow a slave ID.
 
 ## Libraries
 - `WiFi.h`
@@ -36,6 +38,9 @@ Outbound to backend:
 - `register`: `{ "serverID": "1234", "clientID": "5678", "ip": "192.168.4.20" }`
 - `staresult`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
 - `response`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
+
+Inbound from backend:
+- `bind_slave`: `{ "serverID": "1234", "clientID": "5678" }`
 
 Legacy TCP mapping:
 - `sta=` -> `staresult`

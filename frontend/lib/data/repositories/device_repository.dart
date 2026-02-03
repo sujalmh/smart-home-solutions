@@ -83,4 +83,13 @@ class DeviceRepository {
     final response = await api.getJson('/api/devices/$serverId/gateway/status');
     return response['online'] == true;
   }
+
+  Future<void> bindSlave({
+    required String serverId,
+    required String clientId,
+  }) async {
+    await api.postJson('/api/devices/$serverId/gateway/bind', {
+      'client_id': clientId,
+    });
+  }
 }
