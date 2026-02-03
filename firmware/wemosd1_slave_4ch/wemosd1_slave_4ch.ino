@@ -6,7 +6,7 @@ const char* WIFI_SSID = "Nuron";
 const char* WIFI_PASS = "mnbvcx12";
 
 // Master TCP target
-const char* MASTER_IP = "192.168.0.120";
+const char* MASTER_HOST = "master-gateway.local";
 const uint16_t MASTER_PORT = 6000;
 
 // Slave identity (wire ID without RSW-)
@@ -19,7 +19,10 @@ ESP8266WebServer server(80);
 
 int relayState[4] = {0, 0, 0, 0};
 unsigned long lastRegistrationMs = 0;
-const unsigned long REGISTRATION_INTERVAL_MS = 60000;
+const unsigned long REGISTRATION_INTERVAL_MS = 15000;
+IPAddress masterIp;
+unsigned long lastResolveMs = 0;
+const unsigned long RESOLVE_INTERVAL_MS = 10000;
 
 int compToIndex(const String& comp) {
   if (comp == "Comp0") return 0;
@@ -34,10 +37,29 @@ void applyRelayState(int index, int stat) {
   digitalWrite(RELAY_PINS[index], relayState[index] ? LOW : HIGH);
 }
 
+bool resolveMasterIp() {
+  unsigned long now = millis();
+  if (now - lastResolveMs < RESOLVE_INTERVAL_MS && masterIp != IPAddress(0, 0, 0, 0)) {
+    return true;
+  }
+  lastResolveMs = now;
+  IPAddress resolved;
+  if (WiFi.hostByName(MASTER_HOST, resolved)) {
+    masterIp = resolved;
+    Serial.println("Resolved master IP: " + masterIp.toString());
+    return true;
+  }
+  Serial.println("Failed to resolve master host.");
+  return false;
+}
+
 bool sendLinesToMaster(const String* lines, size_t count) {
+  if (!resolveMasterIp()) {
+    return false;
+  }
   WiFiClient client;
   Serial.println("Connecting to master TCP...");
-  if (!client.connect(MASTER_IP, MASTER_PORT)) {
+  if (!client.connect(masterIp, MASTER_PORT)) {
     Serial.println("Master TCP connect failed.");
     return false;
   }

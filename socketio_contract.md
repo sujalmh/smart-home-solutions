@@ -180,6 +180,10 @@ Payload:
 Meaning:
 - Reports a slave seen on the LAN even if unbound.
 
+Binding behavior:
+- `drg=` always produces `slave_seen`.
+- `register` is only emitted after `bind_slave`.
+
 ## Backend to Master ESP32 Gateway
 
 ### bind_slave

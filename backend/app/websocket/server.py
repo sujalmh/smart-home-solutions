@@ -55,7 +55,7 @@ async def _ensure_server(session, server_id: str | None) -> Server | None:
     server = await session.get(Server, full_id)
     if server is None:
         pwd = full_id[4:] if full_id.startswith("RSW-") else full_id
-        server = Server(server_id=full_id, pwd=pwd, ip="192.168.4.100")
+        server = Server(server_id=full_id, pwd=pwd, ip="")
         session.add(server)
         await session.commit()
     return server
@@ -75,7 +75,7 @@ async def _ensure_client(
             client_id=full_id,
             server_id=server_full or "",
             pwd=pwd,
-            ip="0.0.0.0",
+            ip="",
         )
         session.add(client)
         await session.commit()

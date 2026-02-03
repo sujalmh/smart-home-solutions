@@ -121,7 +121,7 @@ async def config_server(
                 if payload and payload.pwd
                 else _default_server_pwd(normalized_server_id)
             ),
-            ip=(payload.ip if payload and payload.ip else "192.168.4.100"),
+            ip=(payload.ip if payload and payload.ip else ""),
         )
         session.add(server)
         await session.commit()
@@ -193,7 +193,7 @@ async def register_device(
         server = Server(
             server_id=normalized_server_id,
             pwd=_default_server_pwd(normalized_server_id),
-            ip="192.168.4.100",
+            ip="",
         )
         session.add(server)
         await session.commit()
@@ -226,7 +226,7 @@ async def gateway_bind(
         server = Server(
             server_id=normalized_server_id,
             pwd=_default_server_pwd(normalized_server_id),
-            ip="192.168.4.100",
+            ip="",
         )
         session.add(server)
         await session.commit()
@@ -237,7 +237,7 @@ async def gateway_bind(
             client_id=normalized_client_id,
             server_id=normalized_server_id,
             pwd=normalized_client_id,
-            ip="0.0.0.0",
+            ip="",
         )
         session.add(client)
     else:
@@ -261,7 +261,7 @@ async def gateway_unbind(
         server = Server(
             server_id=normalized_server_id,
             pwd=_default_server_pwd(normalized_server_id),
-            ip="192.168.4.100",
+            ip="",
         )
         session.add(server)
         await session.commit()

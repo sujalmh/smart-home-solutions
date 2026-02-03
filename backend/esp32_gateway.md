@@ -9,7 +9,7 @@ legacy `usrcmd/usrini` protocol.
 - Listen on TCP port `6000` for `sta=`, `res=`, `drg=`, `dst=` from slave ESPs.
 - Parse and normalize legacy messages (wire IDs without `RSW-`).
 - Maintain mapping of `slave_id -> ip` for HTTP routing.
-- Optionally require binding before accepting `drg=`.
+- Require binding before accepting `drg=` updates (discover only).
 - Emit `staresult`/`response` to backend only after real `sta=`/`res=`.
 - Emit `register` on `drg=` and treat `dst=` as `staresult` (ignore `END`).
 - Receive `command`/`status` from backend and forward to slaves via HTTP.
@@ -43,6 +43,10 @@ Outbound to backend:
 Inbound from backend:
 - `bind_slave`: `{ "serverID": "1234", "clientID": "5678" }`
 - `unbind_slave`: `{ "serverID": "1234", "clientID": "5678" }`
+
+Binding behavior:
+- `drg=` always updates discovery (`slave_seen`).
+- The master only registers/binds after the app sends `bind_slave`.
 
 Legacy TCP mapping:
 - `sta=` -> `staresult`

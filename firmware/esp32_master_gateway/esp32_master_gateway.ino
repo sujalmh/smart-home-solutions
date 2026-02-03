@@ -153,6 +153,15 @@ String findSlaveIp(const String& id) {
   return String();
 }
 
+String findSeenIp(const String& id) {
+  for (size_t i = 0; i < seenCount; i++) {
+    if (seenIds[i] == id) {
+      return seenIps[i];
+    }
+  }
+  return String();
+}
+
 bool isKnownSlave(const String& id) {
   for (size_t i = 0; i < slaveCount; i++) {
     if (slaves[i].id == id) {
@@ -459,9 +468,10 @@ void handleBindSlave(JsonObject data) {
   addPendingSlave(clientId);
   logLine("Bind requested for slave " + clientId);
 
-  String ip = findSlaveIp(clientId);
+  String ip = findSeenIp(clientId);
   if (ip.length() > 0) {
     removePendingSlave(clientId);
+    upsertSlave(clientId, ip);
     emitRegister(clientId, ip);
   }
 }
