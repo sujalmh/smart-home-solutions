@@ -232,7 +232,7 @@ bool sendHttpGet(const String& ip, const String& path) {
   http.end();
   return code > 0 && code < 400;
 }
-
+  
 void emitEvent(const char* eventName, const JsonDocument& doc) {
   DynamicJsonDocument envelope(512);
   envelope["event"] = eventName;

@@ -129,9 +129,11 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
             else
               boundAsync.when(
                 data: (clients) {
-                  final boundIds = clients.map((c) => c.clientId).toSet();
+                  final boundIds = clients
+                      .map((c) => _wireId(c.clientId))
+                      .toSet();
                   final unbound = _seen.where((entry) {
-                    final id = entry['clientID']?.toString() ?? '';
+                    final id = _wireId(entry['clientID']?.toString() ?? '');
                     return id.isNotEmpty && !boundIds.contains(id);
                   }).toList();
                   if (unbound.isEmpty) {
@@ -397,6 +399,13 @@ class _DeviceCard extends StatelessWidget {
 }
 
 String _displayId(String value) {
+  if (value.startsWith('RSW-')) {
+    return value.substring(4);
+  }
+  return value;
+}
+
+String _wireId(String value) {
   if (value.startsWith('RSW-')) {
     return value.substring(4);
   }
