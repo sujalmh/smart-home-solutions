@@ -18,6 +18,12 @@ def _normalize_id(value: str) -> str:
     return f"RSW-{value}"
 
 
+def _alt_id(value: str) -> str | None:
+    if value.startswith("RSW-"):
+        return value[4:]
+    return None
+
+
 @router.get("", response_model=list[ClientRead])
 async def list_clients(
     server_id: str | None = Query(default=None),
@@ -25,7 +31,12 @@ async def list_clients(
 ) -> list[ClientRead]:
     stmt = select(Client)
     if server_id:
-        stmt = stmt.where(Client.server_id == _normalize_id(server_id))
+        normalized = _normalize_id(server_id)
+        raw = _alt_id(normalized)
+        if raw:
+            stmt = stmt.where(Client.server_id.in_([normalized, raw]))
+        else:
+            stmt = stmt.where(Client.server_id == normalized)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -73,9 +84,11 @@ async def list_modules(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SwitchModuleRead]:
     normalized_client_id = _normalize_id(client_id)
-    result = await session.execute(
-        select(SwitchModule).where(SwitchModule.client_id == normalized_client_id)
-    )
+    raw_id = _alt_id(normalized_client_id)
+    stmt = select(SwitchModule).where(SwitchModule.client_id == normalized_client_id)
+    if raw_id:
+        stmt = stmt.where(SwitchModule.client_id.in_([normalized_client_id, raw_id]))
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -91,8 +104,14 @@ async def update_module(
         SwitchModule, {"client_id": normalized_client_id, "comp_id": comp_id}
     )
     if module is None:
+        raw_id = _alt_id(normalized_client_id)
+        if raw_id:
+            module = await session.get(
+                SwitchModule, {"client_id": raw_id, "comp_id": comp_id}
+            )
+    if module is None:
         module = SwitchModule(
-            client_id=client_id,
+            client_id=normalized_client_id,
             comp_id=comp_id,
             mode=payload.mode,
             status=payload.status,
