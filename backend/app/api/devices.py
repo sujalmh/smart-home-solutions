@@ -91,17 +91,7 @@ async def device_command(
 
     client = await _get_client_any(session, payload.dev_id)
     if client is None:
-        normalized_dev_id = _normalize_id(payload.dev_id)
-        client = Client(
-            client_id=normalized_dev_id,
-            server_id=normalized_server_id,
-            pwd=normalized_dev_id,
-            ip="",
-        )
-        session.add(client)
-        await session.flush()
-        await _seed_default_modules(session, normalized_dev_id)
-        await session.commit()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
 
     await emit_gateway_command(
@@ -143,17 +133,7 @@ async def device_status(
 
     client = await _get_client_any(session, payload.dev_id)
     if client is None:
-        normalized_dev_id = _normalize_id(payload.dev_id)
-        client = Client(
-            client_id=normalized_dev_id,
-            server_id=normalized_server_id,
-            pwd=normalized_dev_id,
-            ip="",
-        )
-        session.add(client)
-        await session.flush()
-        await _seed_default_modules(session, normalized_dev_id)
-        await session.commit()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
 
     await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
