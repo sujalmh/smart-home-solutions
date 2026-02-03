@@ -22,7 +22,9 @@ from ..websocket.server import (
     emit_gateway_bind,
     emit_gateway_command,
     emit_gateway_status,
+    emit_gateway_unbind,
     is_gateway_connected,
+    list_seen_slaves,
 )
 
 
@@ -35,29 +37,46 @@ def _default_server_pwd(server_id: str) -> str:
     return server_id
 
 
+def _normalize_id(value: str) -> str:
+    if value.startswith("RSW-"):
+        return value
+    return f"RSW-{value}"
+
+
 @router.post("/{server_id}/command", response_model=DeviceCommandResponse)
 async def device_command(
     server_id: str,
     payload: DeviceCommandRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceCommandResponse:
-    server = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    normalized_dev_id = _normalize_id(payload.dev_id)
+    server = await session.get(Server, normalized_server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
 
-    client = await session.get(Client, payload.dev_id)
+    client = await session.get(Client, normalized_dev_id)
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
 
     await emit_gateway_command(
-        payload.server_id,
-        payload.dev_id,
+        normalized_server_id,
+        normalized_dev_id,
         payload.comp,
         payload.mod,
         payload.stat,
         payload.val,
     )
-    return DeviceCommandResponse.model_validate(payload.model_dump())
+    return DeviceCommandResponse.model_validate(
+        {
+            "serverID": normalized_server_id,
+            "devID": normalized_dev_id,
+            "comp": payload.comp,
+            "mod": payload.mod,
+            "stat": payload.stat,
+            "val": payload.val,
+        }
+    )
 
 
 @router.post("/{server_id}/status", response_model=list[SwitchModuleRead])
@@ -66,17 +85,19 @@ async def device_status(
     payload: DeviceStatusRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SwitchModuleRead]:
-    server = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    normalized_dev_id = _normalize_id(payload.dev_id)
+    server = await session.get(Server, normalized_server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
 
-    client = await session.get(Client, payload.dev_id)
+    client = await session.get(Client, normalized_dev_id)
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
 
-    await emit_gateway_status(payload.server_id, payload.dev_id, payload.comp)
+    await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
 
-    stmt = select(SwitchModule).where(SwitchModule.client_id == payload.dev_id)
+    stmt = select(SwitchModule).where(SwitchModule.client_id == normalized_dev_id)
     if payload.comp:
         stmt = stmt.where(SwitchModule.comp_id == payload.comp)
     result = await session.execute(stmt)
@@ -90,11 +111,16 @@ async def config_server(
     payload: DeviceServerConfigRequest | None = None,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceConfigResponse:
-    existing = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    existing = await session.get(Server, normalized_server_id)
     if existing is None:
         server = Server(
-            server_id=server_id,
-            pwd=(payload.pwd if payload and payload.pwd else _default_server_pwd(server_id)),
+            server_id=normalized_server_id,
+            pwd=(
+                payload.pwd
+                if payload and payload.pwd
+                else _default_server_pwd(normalized_server_id)
+            ),
             ip=(payload.ip if payload and payload.ip else "192.168.4.100"),
         )
         session.add(server)
@@ -108,7 +134,8 @@ async def config_remote(
     payload: DeviceRemoteConfigRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceConfigResponse:
-    server = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    server = await session.get(Server, normalized_server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
     return DeviceConfigResponse(status="ok")
@@ -120,15 +147,17 @@ async def config_client(
     payload: DeviceClientConfigRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceConfigResponse:
-    server = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    normalized_client_id = _normalize_id(payload.client_id)
+    server = await session.get(Server, normalized_server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
 
-    existing = await session.get(Client, payload.client_id)
+    existing = await session.get(Client, normalized_client_id)
     if existing is None:
         client = Client(
-            client_id=payload.client_id,
-            server_id=server_id,
+            client_id=normalized_client_id,
+            server_id=normalized_server_id,
             pwd=payload.pwd,
             ip=payload.ip,
         )
@@ -139,7 +168,7 @@ async def config_client(
         for comp_id in default_modules:
             session.add(
                 SwitchModule(
-                    client_id=payload.client_id,
+                    client_id=normalized_client_id,
                     comp_id=comp_id,
                     mode=1,
                     status=0,
@@ -158,11 +187,12 @@ async def register_device(
     payload: DeviceRegisterRequest | None = None,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceConfigResponse:
-    existing = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    existing = await session.get(Server, normalized_server_id)
     if existing is None:
         server = Server(
-            server_id=server_id,
-            pwd=_default_server_pwd(server_id),
+            server_id=normalized_server_id,
+            pwd=_default_server_pwd(normalized_server_id),
             ip="192.168.4.100",
         )
         session.add(server)
@@ -173,7 +203,14 @@ async def register_device(
 
 @router.get("/{server_id}/gateway/status")
 async def gateway_status(server_id: str) -> dict:
-    return {"online": is_gateway_connected(server_id)}
+    normalized_server_id = _normalize_id(server_id)
+    return {"online": is_gateway_connected(normalized_server_id)}
+
+
+@router.get("/{server_id}/gateway/seen")
+async def gateway_seen(server_id: str) -> list[dict[str, str]]:
+    normalized_server_id = _normalize_id(server_id)
+    return await list_seen_slaves(normalized_server_id)
 
 
 @router.post("/{server_id}/gateway/bind", response_model=DeviceConfigResponse)
@@ -182,20 +219,38 @@ async def gateway_bind(
     payload: DeviceBindRequest,
     session: AsyncSession = Depends(get_async_session),
 ) -> DeviceConfigResponse:
-    server = await session.get(Server, server_id)
+    normalized_server_id = _normalize_id(server_id)
+    normalized_client_id = _normalize_id(payload.client_id)
+    server = await session.get(Server, normalized_server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
 
-    client = await session.get(Client, payload.client_id)
+    client = await session.get(Client, normalized_client_id)
     if client is None:
         client = Client(
-            client_id=payload.client_id,
-            server_id=server_id,
-            pwd=payload.client_id,
+            client_id=normalized_client_id,
+            server_id=normalized_server_id,
+            pwd=normalized_client_id,
             ip="0.0.0.0",
         )
         session.add(client)
         await session.commit()
 
-    await emit_gateway_bind(server_id, payload.client_id)
+    await emit_gateway_bind(normalized_server_id, normalized_client_id)
+    return DeviceConfigResponse(status="ok")
+
+
+@router.post("/{server_id}/gateway/unbind", response_model=DeviceConfigResponse)
+async def gateway_unbind(
+    server_id: str,
+    payload: DeviceBindRequest,
+    session: AsyncSession = Depends(get_async_session),
+) -> DeviceConfigResponse:
+    normalized_server_id = _normalize_id(server_id)
+    normalized_client_id = _normalize_id(payload.client_id)
+    server = await session.get(Server, normalized_server_id)
+    if server is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+
+    await emit_gateway_unbind(normalized_server_id, normalized_client_id)
     return DeviceConfigResponse(status="ok")

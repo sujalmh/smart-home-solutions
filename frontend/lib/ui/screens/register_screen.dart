@@ -77,13 +77,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Register a server device with the backend.',
+              'Register and bind devices with the gateway.',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _serverController,
-              decoration: const InputDecoration(labelText: 'Server ID'),
+              decoration: const InputDecoration(
+                labelText: 'Server ID',
+                hintText: 'RSW-1234 or 1234',
+              ),
             ),
             const SizedBox(height: 20),
             FilledButton(onPressed: _register, child: const Text('Register')),
@@ -95,7 +98,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: 20),
             TextField(
               controller: _clientController,
-              decoration: const InputDecoration(labelText: 'Slave ID'),
+              decoration: const InputDecoration(
+                labelText: 'Slave ID',
+                hintText: 'RSW-5678 or 5678',
+              ),
             ),
             const SizedBox(height: 12),
             FilledButton(

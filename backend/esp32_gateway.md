@@ -36,11 +36,13 @@ Inbound from backend:
 Outbound to backend:
 - `gateway_register`: `{ "serverID": "1234", "ip": "192.168.1.50" }`
 - `register`: `{ "serverID": "1234", "clientID": "5678", "ip": "192.168.4.20" }`
+- `slave_seen`: `{ "serverID": "1234", "clientID": "5678", "ip": "192.168.4.20" }`
 - `staresult`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
 - `response`: `{ "devID": "5678", "comp": "Comp0", "mod": 1, "stat": 1, "val": 800 }`
 
 Inbound from backend:
 - `bind_slave`: `{ "serverID": "1234", "clientID": "5678" }`
+- `unbind_slave`: `{ "serverID": "1234", "clientID": "5678" }`
 
 Legacy TCP mapping:
 - `sta=` -> `staresult`

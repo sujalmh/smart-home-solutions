@@ -88,6 +88,15 @@ Payload:
 Meaning:
 - Requests the master gateway to bind/allow a slave ID.
 
+### unbind_slave
+Payload:
+{
+  "serverID": "1234",
+  "clientID": "5678"
+}
+Meaning:
+- Requests the master gateway to drop a bound slave ID.
+
 ## Backend to Client (Flutter)
 
 ### response
@@ -160,6 +169,16 @@ Payload:
 Notes:
 - `dst=` registration status lines are forwarded as `staresult`.
 - `END` markers are ignored except for local completion tracking.
+
+### slave_seen (master -> backend)
+Payload:
+{
+  "serverID": "1234",
+  "clientID": "5678",
+  "ip": "192.168.4.20"
+}
+Meaning:
+- Reports a slave seen on the LAN even if unbound.
 
 ## Backend to Master ESP32 Gateway
 

@@ -6,6 +6,13 @@ class ServerRepository {
 
   ServerRepository({required this.api});
 
+  String _normalizeId(String value) {
+    if (value.startsWith('RSW-')) {
+      return value;
+    }
+    return 'RSW-$value';
+  }
+
   Future<List<Server>> listServers() async {
     final response = await api.getList('/api/servers');
     return response
@@ -19,7 +26,7 @@ class ServerRepository {
     required String ip,
   }) async {
     final response = await api.postJson('/api/servers', {
-      'server_id': serverId,
+      'server_id': _normalizeId(serverId),
       'pwd': password,
       'ip': ip,
     });

@@ -7,10 +7,17 @@ class ClientRepository {
 
   ClientRepository({required this.api});
 
+  String _normalizeId(String value) {
+    if (value.startsWith('RSW-')) {
+      return value;
+    }
+    return 'RSW-$value';
+  }
+
   Future<List<Client>> listClients({String? serverId}) async {
     final response = await api.getList(
       '/api/clients',
-      query: serverId == null ? null : {'server_id': serverId},
+      query: serverId == null ? null : {'server_id': _normalizeId(serverId)},
     );
     return response
         .map((item) => Client.fromJson(item as Map<String, dynamic>))
@@ -24,8 +31,8 @@ class ClientRepository {
     required String ip,
   }) async {
     final response = await api.postJson('/api/clients', {
-      'client_id': clientId,
-      'server_id': serverId,
+      'client_id': _normalizeId(clientId),
+      'server_id': _normalizeId(serverId),
       'pwd': password,
       'ip': ip,
     });
@@ -33,7 +40,9 @@ class ClientRepository {
   }
 
   Future<List<SwitchModule>> listModules(String clientId) async {
-    final response = await api.getList('/api/clients/$clientId/modules');
+    final response = await api.getList(
+      '/api/clients/${_normalizeId(clientId)}/modules',
+    );
     return response
         .map((item) => SwitchModule.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -47,7 +56,7 @@ class ClientRepository {
     required int value,
   }) async {
     final response = await api.putJson(
-      '/api/clients/$clientId/modules/$compId',
+      '/api/clients/${_normalizeId(clientId)}/modules/$compId',
       {'mode': mode, 'status': status, 'value': value},
     );
     return SwitchModule.fromJson(response);

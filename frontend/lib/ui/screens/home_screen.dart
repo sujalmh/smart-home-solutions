@@ -4,6 +4,7 @@ import 'room_switches_screen.dart';
 import 'remote_login_screen.dart';
 import 'register_screen.dart';
 import 'select_device_screen.dart';
+import 'network_devices_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -71,6 +72,12 @@ class HomeScreen extends StatelessWidget {
                           context,
                           SelectDeviceScreen.routeName,
                         ),
+                      ),
+                      _SectionCard(
+                        title: 'Network Devices',
+                        subtitle: 'Discover, bind, and monitor devices.',
+                        icon: Icons.router_outlined,
+                        onTap: () => _promptNetwork(context),
                       ),
                       _SectionCard(
                         title: 'Switch Modules',
@@ -190,6 +197,42 @@ void _promptServer(BuildContext context) {
               context,
               MaterialPageRoute(
                 builder: (_) => RoomSwitchesScreen(serverId: serverId),
+              ),
+            );
+          },
+          child: const Text('Continue'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _promptNetwork(BuildContext context) {
+  final controller = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Enter Server ID'),
+      content: TextField(
+        controller: controller,
+        decoration: const InputDecoration(hintText: 'RSW-xxxx'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final serverId = controller.text.trim();
+            if (serverId.isEmpty) {
+              return;
+            }
+            Navigator.pop(dialogContext);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NetworkDevicesScreen(serverId: serverId),
               ),
             );
           },

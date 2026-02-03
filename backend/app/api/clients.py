@@ -12,6 +12,12 @@ from ..schemas.switch_module import SwitchModuleRead, SwitchModuleUpdate
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
+def _normalize_id(value: str) -> str:
+    if value.startswith("RSW-"):
+        return value
+    return f"RSW-{value}"
+
+
 @router.get("", response_model=list[ClientRead])
 async def list_clients(
     server_id: str | None = Query(default=None),
@@ -19,7 +25,7 @@ async def list_clients(
 ) -> list[ClientRead]:
     stmt = select(Client)
     if server_id:
-        stmt = stmt.where(Client.server_id == server_id)
+        stmt = stmt.where(Client.server_id == _normalize_id(server_id))
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -29,13 +35,15 @@ async def create_client(
     payload: ClientCreate,
     session: AsyncSession = Depends(get_async_session),
 ) -> ClientRead:
-    existing = await session.get(Client, payload.client_id)
+    normalized_client_id = _normalize_id(payload.client_id)
+    normalized_server_id = _normalize_id(payload.server_id)
+    existing = await session.get(Client, normalized_client_id)
     if existing:
         return existing
 
     client = Client(
-        client_id=payload.client_id,
-        server_id=payload.server_id,
+        client_id=normalized_client_id,
+        server_id=normalized_server_id,
         pwd=payload.pwd,
         ip=payload.ip,
     )
@@ -46,7 +54,7 @@ async def create_client(
     for comp_id in default_modules:
         session.add(
             SwitchModule(
-                client_id=payload.client_id,
+                client_id=normalized_client_id,
                 comp_id=comp_id,
                 mode=1,
                 status=0,
@@ -64,8 +72,9 @@ async def list_modules(
     client_id: str,
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SwitchModuleRead]:
+    normalized_client_id = _normalize_id(client_id)
     result = await session.execute(
-        select(SwitchModule).where(SwitchModule.client_id == client_id)
+        select(SwitchModule).where(SwitchModule.client_id == normalized_client_id)
     )
     return list(result.scalars().all())
 
@@ -77,7 +86,10 @@ async def update_module(
     payload: SwitchModuleUpdate,
     session: AsyncSession = Depends(get_async_session),
 ) -> SwitchModuleRead:
-    module = await session.get(SwitchModule, {"client_id": client_id, "comp_id": comp_id})
+    normalized_client_id = _normalize_id(client_id)
+    module = await session.get(
+        SwitchModule, {"client_id": normalized_client_id, "comp_id": comp_id}
+    )
     if module is None:
         module = SwitchModule(
             client_id=client_id,

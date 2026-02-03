@@ -31,7 +31,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                title: Text(client.clientId),
+                title: Text('Slave ${_displayId(client.clientId)}'),
                 subtitle: Text('IP ${client.ip}'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
@@ -52,4 +52,11 @@ class RoomSwitchesScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _displayId(String value) {
+  if (value.startsWith('RSW-')) {
+    return value.substring(4);
+  }
+  return value;
 }

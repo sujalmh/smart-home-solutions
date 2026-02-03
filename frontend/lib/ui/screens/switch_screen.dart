@@ -20,6 +20,13 @@ class SwitchScreen extends ConsumerStatefulWidget {
 
 class _SwitchScreenState extends ConsumerState<SwitchScreen> {
   @override
+  void initState() {
+    super.initState();
+    final token = ref.read(authControllerProvider).token;
+    ref.read(socketClientProvider).connect(token: token);
+  }
+
+  @override
   Widget build(BuildContext context) {
     ref.listen(socketStatusProvider, (_, next) {
       next.whenData((data) {
@@ -177,4 +184,11 @@ class _SwitchCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _displayId(String value) {
+  if (value.startsWith('RSW-')) {
+    return value.substring(4);
+  }
+  return value;
 }

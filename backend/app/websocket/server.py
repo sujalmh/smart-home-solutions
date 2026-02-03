@@ -117,6 +117,7 @@ class WebSocketManager:
         self._clients: set[WebSocket] = set()
         self._gateways: dict[str, WebSocket] = {}
         self._gateway_by_ws: dict[WebSocket, str] = {}
+        self._seen: dict[str, dict[str, str]] = {}
         self._lock = asyncio.Lock()
 
     async def add_client(self, websocket: WebSocket) -> None:
@@ -171,6 +172,16 @@ class WebSocketManager:
     def is_gateway_connected(self, server_id: str) -> bool:
         websocket = self._gateways.get(server_id)
         return self._is_connected(websocket) if websocket else False
+
+    async def record_seen(self, server_id: str, client_id: str, ip: str) -> None:
+        async with self._lock:
+            bucket = self._seen.setdefault(server_id, {})
+            bucket[client_id] = ip
+
+    async def list_seen(self, server_id: str) -> list[dict[str, str]]:
+        async with self._lock:
+            bucket = dict(self._seen.get(server_id, {}))
+        return [{"clientID": client_id, "ip": ip} for client_id, ip in bucket.items()]
 
     @staticmethod
     def _is_connected(websocket: WebSocket) -> bool:
@@ -229,11 +240,27 @@ async def emit_gateway_bind(server_id: str | None, client_id: str | None) -> Non
     await ws_manager.send_to_gateway(wire_server_id, "bind_slave", payload)
 
 
+async def emit_gateway_unbind(server_id: str | None, client_id: str | None) -> None:
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return
+    payload = {"serverID": wire_server_id, "clientID": wire_client_id}
+    await ws_manager.send_to_gateway(wire_server_id, "unbind_slave", payload)
+
+
 def is_gateway_connected(server_id: str | None) -> bool:
     wire_server_id = _strip_prefix(server_id)
     if not wire_server_id:
         return False
     return ws_manager.is_gateway_connected(wire_server_id)
+
+
+async def list_seen_slaves(server_id: str | None) -> list[dict[str, str]]:
+    wire_server_id = _strip_prefix(server_id)
+    if not wire_server_id:
+        return []
+    return await ws_manager.list_seen(wire_server_id)
 
 
 async def _handle_gateway_register(websocket: WebSocket, data: dict) -> None:
@@ -265,6 +292,21 @@ async def _handle_register(data: dict) -> None:
             if server:
                 client.server_id = server.server_id
             await session.commit()
+
+
+async def _handle_slave_seen(data: dict) -> None:
+    server_id = data.get("serverID")
+    client_id = data.get("clientID") or data.get("devID")
+    ip = data.get("ip")
+    if not isinstance(server_id, str) or not isinstance(client_id, str):
+        return
+    if not isinstance(ip, str):
+        ip = ""
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return
+    await ws_manager.record_seen(wire_server_id, wire_client_id, ip)
 
 
 async def _handle_status_event(event: str, data: dict) -> None:
@@ -330,6 +372,10 @@ async def _handle_message(websocket: WebSocket, message: str) -> None:
         await _handle_status_request(data)
     elif event == "bind_slave":
         await emit_gateway_bind(data.get("serverID"), data.get("clientID"))
+    elif event == "unbind_slave":
+        await emit_gateway_unbind(data.get("serverID"), data.get("clientID"))
+    elif event == "slave_seen":
+        await _handle_slave_seen(data)
 
 
 def register_websocket_routes(app: FastAPI) -> None:

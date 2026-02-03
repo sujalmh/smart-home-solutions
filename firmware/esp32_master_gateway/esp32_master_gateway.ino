@@ -245,6 +245,15 @@ void emitRegister(const String& clientId, const String& ip) {
   emitEvent("register", doc);
 }
 
+void emitSlaveSeen(const String& clientId, const String& ip) {
+  DynamicJsonDocument doc(256);
+  doc["serverID"] = SERVER_ID;
+  doc["clientID"] = clientId;
+  doc["ip"] = ip;
+  logLine("WebSocket emit slave_seen client=" + clientId + " ip=" + ip);
+  emitEvent("slave_seen", doc);
+}
+
 void emitStaResult(const String& devId, const String& comp, int mod, int stat, int val) {
   DynamicJsonDocument doc(256);
   doc["devID"] = devId;
@@ -276,6 +285,7 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     if (count >= 2) {
       String clientId = normalizeId(tokens[0]);
       String ip = tokens[1];
+      emitSlaveSeen(clientId, ip);
       bool canBind = !REQUIRE_BINDING || isPendingSlave(clientId) || isKnownSlave(clientId);
       if (!canBind) {
         logLine("Bind required, ignoring drg for " + clientId);
@@ -419,6 +429,26 @@ void handleBindSlave(JsonObject data) {
   }
 }
 
+void handleUnbindSlave(JsonObject data) {
+  String serverId = normalizeId(String(data["serverID"] | ""));
+  if (serverId.length() > 0 && serverId != SERVER_ID) {
+    return;
+  }
+  String clientId = normalizeId(String(data["clientID"] | ""));
+  if (clientId.length() == 0) {
+    return;
+  }
+  removePendingSlave(clientId);
+  for (size_t i = 0; i < slaveCount; i++) {
+    if (slaves[i].id == clientId) {
+      slaves[i] = slaves[slaveCount - 1];
+      slaveCount--;
+      break;
+    }
+  }
+  logLine("Unbound slave " + clientId);
+}
+
 void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   logLine(String("WebSocket type ") + webSocketTypeName(type));
   if (type == WStype_CONNECTED) {
@@ -458,6 +488,8 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     handleStatus(data);
   } else if (strcmp(eventName, "bind_slave") == 0) {
     handleBindSlave(data);
+  } else if (strcmp(eventName, "unbind_slave") == 0) {
+    handleUnbindSlave(data);
   }
 }
 
