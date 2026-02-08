@@ -82,7 +82,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
           children: [
             _HeaderCard(serverId: widget.serverId, statusAsync: statusAsync),
             const SizedBox(height: 18),
-            const _SectionTitle('Connected devices'),
+            const _SectionTitle('My devices'),
             const SizedBox(height: 8),
             boundAsync.when(
               data: (clients) {
@@ -120,7 +120,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            const _SectionTitle('Discovered devices'),
+            const _SectionTitle('Available devices'),
             const SizedBox(height: 8),
             if (_loading)
               const Center(child: CircularProgressIndicator())
@@ -138,7 +138,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                   }).toList();
                   if (unbound.isEmpty) {
                     return const _EmptySection(
-                      message: 'No unbound devices discovered yet.',
+                      message: 'No available devices yet.',
                     );
                   }
                   return Column(

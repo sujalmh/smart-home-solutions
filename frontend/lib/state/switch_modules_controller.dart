@@ -10,6 +10,7 @@ class SwitchModulesController
   final String clientId;
   final ClientRepository clientRepository;
   final DeviceRepository deviceRepository;
+  final Map<String, bool> _pending = {};
 
   SwitchModulesController({
     required this.clientId,
@@ -36,50 +37,30 @@ class SwitchModulesController
     required int status,
     required int value,
   }) async {
-    final modules = state.value ?? [];
-    final exists = modules.any((module) => module.compId == compId);
-    final updated = modules
-        .map(
-          (module) => module.compId == compId
-              ? SwitchModule(
-                  clientId: module.clientId,
-                  compId: module.compId,
-                  mode: mode,
-                  status: status,
-                  value: value,
-                )
-              : module,
-        )
-        .toList();
-    if (!exists) {
-      updated.add(
-        SwitchModule(
-          clientId: clientId,
-          compId: compId,
-          mode: mode,
-          status: status,
-          value: value,
+    _pending[compId] = true;
+    _notifyPending();
+    try {
+      await deviceRepository.sendCommand(
+        DeviceCommand(
+          serverId: serverId,
+          devId: clientId,
+          comp: compId,
+          mod: mode,
+          stat: status,
+          val: value,
         ),
       );
-    }
-    state = AsyncValue.data(updated);
 
-    await deviceRepository.sendCommand(
-      DeviceCommand(
+      await deviceRepository.requestStatus(
         serverId: serverId,
         devId: clientId,
         comp: compId,
-        mod: mode,
-        stat: status,
-        val: value,
-      ),
-    );
-
-    await deviceRepository.requestStatus(
-      serverId: serverId,
-      devId: clientId,
-      comp: compId,
-    );
+      );
+    } catch (_) {
+      _pending.remove(compId);
+      _notifyPending();
+      rethrow;
+    }
   }
 
   void applySocketUpdate(Map<String, dynamic> data) {
@@ -98,6 +79,8 @@ class SwitchModulesController
     final status = (data['stat'] as num?)?.toInt() ?? 0;
     final value = (data['val'] as num?)?.toInt() ?? 0;
 
+    _pending.remove(compId);
+
     final modules = state.value ?? [];
     final exists = modules.any((module) => module.compId == compId);
     final updated = modules
@@ -127,6 +110,13 @@ class SwitchModulesController
     }
 
     state = AsyncValue.data(updated);
+  }
+
+  bool isPending(String compId) => _pending[compId] == true;
+
+  void _notifyPending() {
+    final modules = List<SwitchModule>.from(state.value ?? []);
+    state = AsyncValue.data(modules);
   }
 
   String _normalizeId(String devId) {

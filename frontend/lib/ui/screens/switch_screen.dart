@@ -45,6 +45,9 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     });
 
     final modulesAsync = ref.watch(switchModulesProvider(widget.clientId));
+    final controller = ref.read(
+      switchModulesProvider(widget.clientId).notifier,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -84,6 +87,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
                 final module = modules[index];
                 return _SwitchCard(
                   module: module,
+                  pending: controller.isPending(module.compId),
                   onModeChanged: (mode) => _sendUpdate(module, mode: mode),
                   onStatusChanged: (status) =>
                       _sendUpdate(module, status: status),
@@ -106,26 +110,37 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     int? status,
     int? value,
   }) async {
-    await ref
-        .read(switchModulesProvider(widget.clientId).notifier)
-        .sendCommand(
-          serverId: widget.serverId,
-          compId: module.compId,
-          mode: mode ?? module.mode,
-          status: status ?? module.status,
-          value: value ?? module.value,
-        );
+    try {
+      await ref
+          .read(switchModulesProvider(widget.clientId).notifier)
+          .sendCommand(
+            serverId: widget.serverId,
+            compId: module.compId,
+            mode: mode ?? module.mode,
+            status: status ?? module.status,
+            value: value ?? module.value,
+          );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device not bound or offline.')),
+      );
+    }
   }
 }
 
 class _SwitchCard extends StatelessWidget {
   final SwitchModule module;
+  final bool pending;
   final ValueChanged<int> onModeChanged;
   final ValueChanged<int> onStatusChanged;
   final ValueChanged<int> onValueChanged;
 
   const _SwitchCard({
     required this.module,
+    required this.pending,
     required this.onModeChanged,
     required this.onStatusChanged,
     required this.onValueChanged,
@@ -147,9 +162,23 @@ class _SwitchCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            module.compId,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                module.compId,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (pending)
+                const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
@@ -161,9 +190,11 @@ class _SwitchCard extends StatelessWidget {
                     ButtonSegment(value: 1, label: Text('Auto')),
                   ],
                   selected: {isAuto ? 1 : 0},
-                  onSelectionChanged: (values) {
-                    onModeChanged(values.first);
-                  },
+                  onSelectionChanged: pending
+                      ? null
+                      : (values) {
+                          onModeChanged(values.first);
+                        },
                 ),
               ),
               const SizedBox(width: 12),
@@ -172,7 +203,9 @@ class _SwitchCard extends StatelessWidget {
                   const Text('Power', style: TextStyle(fontSize: 12)),
                   Switch(
                     value: isOn,
-                    onChanged: (value) => onStatusChanged(value ? 1 : 0),
+                    onChanged: pending
+                        ? null
+                        : (value) => onStatusChanged(value ? 1 : 0),
                   ),
                 ],
               ),
@@ -187,7 +220,9 @@ class _SwitchCard extends StatelessWidget {
             min: 0,
             max: 1000,
             value: module.value.toDouble().clamp(0, 1000),
-            onChanged: (value) => onValueChanged(value.round()),
+            onChanged: pending
+                ? null
+                : (value) => onValueChanged(value.round()),
           ),
         ],
       ),

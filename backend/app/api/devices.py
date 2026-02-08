@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.session import get_async_session
@@ -17,6 +17,7 @@ from ..schemas.device import (
     DeviceServerConfigRequest,
     DeviceStatusRequest,
 )
+from ..schemas.client import ClientRead
 from ..schemas.switch_module import SwitchModuleRead
 from ..websocket.server import (
     emit_gateway_bind,
@@ -238,9 +239,35 @@ async def gateway_status(server_id: str) -> dict:
 
 
 @router.get("/{server_id}/gateway/seen")
-async def gateway_seen(server_id: str) -> list[dict[str, str]]:
+async def gateway_seen(
+    server_id: str,
+    session: AsyncSession = Depends(get_async_session),
+) -> list[dict[str, str]]:
     normalized_server_id = _normalize_id(server_id)
-    return await list_seen_slaves(normalized_server_id)
+    seen = await list_seen_slaves(normalized_server_id)
+    result = await session.execute(
+        select(Client.client_id).where(
+            Client.server_id.in_([normalized_server_id, server_id])
+        )
+    )
+    bound_wire = {
+        client_id[4:] if client_id.startswith("RSW-") else client_id
+        for (client_id,) in result.all()
+    }
+    return [entry for entry in seen if entry.get("clientID") not in bound_wire]
+
+
+@router.get("/{server_id}/bound", response_model=list[ClientRead])
+async def bound_devices(
+    server_id: str,
+    session: AsyncSession = Depends(get_async_session),
+) -> list[ClientRead]:
+    normalized_server_id = _normalize_id(server_id)
+    result = await session.execute(
+        select(Client).where(Client.server_id.in_([normalized_server_id, server_id]))
+    )
+    clients = list(result.scalars().all())
+    return [ClientRead.model_validate(client) for client in clients]
 
 
 @router.post("/{server_id}/gateway/bind", response_model=DeviceConfigResponse)
@@ -299,4 +326,9 @@ async def gateway_unbind(
         await session.commit()
 
     await emit_gateway_unbind(normalized_server_id, normalized_client_id)
+    await session.execute(
+        delete(SwitchModule).where(SwitchModule.client_id == normalized_client_id)
+    )
+    await session.execute(delete(Client).where(Client.client_id == normalized_client_id))
+    await session.commit()
     return DeviceConfigResponse(status="ok")

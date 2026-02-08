@@ -227,12 +227,17 @@ bool sendHttpGet(const String& ip, const String& path) {
   HTTPClient http;
   String url = "http://" + ip + ":" + String(SLAVE_HTTP_PORT) + path;
   logLine("HTTP GET -> " + url);
+  http.setTimeout(3000);
   if (!http.begin(client, url)) {
     logLine("HTTP begin failed");
     return false;
   }
   int code = http.GET();
-  logLine("HTTP status: " + String(code));
+  if (code <= 0) {
+    logLine("HTTP error: " + http.errorToString(code));
+  } else {
+    logLine("HTTP status: " + String(code));
+  }
   http.end();
   return code > 0 && code < 400;
 }
@@ -333,6 +338,11 @@ void handleUdpDiscovery() {
   String clientId = normalizeId(tokens[0]);
   String ip = tokens[1];
   recordSeen(clientId, ip, false);
+  if (isPendingSlave(clientId)) {
+    removePendingSlave(clientId);
+    upsertSlave(clientId, ip);
+    emitRegister(clientId, ip);
+  }
 }
 
 void emitStaResult(const String& devId, const String& comp, int mod, int stat, int val) {

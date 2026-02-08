@@ -15,10 +15,9 @@ class ClientRepository {
   }
 
   Future<List<Client>> listClients({String? serverId}) async {
-    final response = await api.getList(
-      '/api/clients',
-      query: serverId == null ? null : {'server_id': _normalizeId(serverId)},
-    );
+    final response = await (serverId == null
+        ? api.getList('/api/clients')
+        : api.getList('/api/devices/${_normalizeId(serverId)}/bound'));
     return response
         .map((item) => Client.fromJson(item as Map<String, dynamic>))
         .toList();

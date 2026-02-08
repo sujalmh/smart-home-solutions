@@ -115,6 +115,7 @@ void handleCommand() {
   }
 
   String cmd = server.arg("usrcmd");
+  Serial.println("HTTP usrcmd: " + cmd);
   cmd.trim();
   if (!cmd.endsWith(";")) {
     cmd += ";";
@@ -164,6 +165,7 @@ void handleStatusRequest() {
   }
 
   String cmd = server.arg("usrini");
+  Serial.println("HTTP usrini: " + cmd);
   cmd.trim();
 
   String parts[2];
@@ -242,6 +244,11 @@ void setup() {
       return;
     }
     server.send(200, "text/plain", "ok");
+  });
+
+  server.onNotFound([]() {
+    Serial.println("HTTP 404: " + server.uri());
+    server.send(404, "text/plain", "not_found");
   });
 
   server.begin();

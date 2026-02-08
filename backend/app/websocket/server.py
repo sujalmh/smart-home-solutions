@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
@@ -120,8 +121,9 @@ class WebSocketManager:
         self._clients: set[WebSocket] = set()
         self._gateways: dict[str, WebSocket] = {}
         self._gateway_by_ws: dict[WebSocket, str] = {}
-        self._seen: dict[str, dict[str, str]] = {}
+        self._seen: dict[str, dict[str, tuple[str, float]]] = {}
         self._lock = asyncio.Lock()
+        self._seen_ttl = 30.0
 
     async def add_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -177,14 +179,23 @@ class WebSocketManager:
         return self._is_connected(websocket) if websocket else False
 
     async def record_seen(self, server_id: str, client_id: str, ip: str) -> None:
+        now = time.monotonic()
         async with self._lock:
             bucket = self._seen.setdefault(server_id, {})
-            bucket[client_id] = ip
+            bucket[client_id] = (ip, now)
 
     async def list_seen(self, server_id: str) -> list[dict[str, str]]:
+        now = time.monotonic()
         async with self._lock:
             bucket = dict(self._seen.get(server_id, {}))
-        return [{"clientID": client_id, "ip": ip} for client_id, ip in bucket.items()]
+            filtered = {}
+            for client_id, (ip, seen_at) in bucket.items():
+                if now - seen_at <= self._seen_ttl:
+                    filtered[client_id] = ip
+            self._seen[server_id] = {
+                k: (bucket[k][0], bucket[k][1]) for k in filtered.keys()
+            }
+        return [{"clientID": client_id, "ip": ip} for client_id, ip in filtered.items()]
 
     @staticmethod
     def _is_connected(websocket: WebSocket) -> bool:
@@ -281,9 +292,7 @@ async def _handle_gateway_register(websocket: WebSocket, data: dict) -> None:
 
         normalized_server_id = _normalize_id(wire_id)
         result = await session.execute(
-            select(Client.client_id).where(
-                Client.server_id.in_([normalized_server_id, wire_id])
-            )
+            select(Client.client_id).where(Client.server_id == normalized_server_id)
         )
         client_ids = [row[0] for row in result.all()]
 
@@ -293,6 +302,7 @@ async def _handle_gateway_register(websocket: WebSocket, data: dict) -> None:
             continue
         payload = {"serverID": wire_id, "clientID": wire_client_id}
         await ws_manager.send_to_gateway(wire_id, "bind_slave", payload)
+
     logger.info("gateway registered server=%s", wire_id)
 
 
@@ -345,8 +355,9 @@ async def _handle_status_event(event: str, data: dict) -> None:
 
     async with AsyncSessionLocal() as session:
         client = await _get_client(session, dev_id)
-        if client:
-            await _upsert_module(session, client.client_id, comp, mod, stat, val)
+        if not client:
+            return
+        await _upsert_module(session, client.client_id, comp, mod, stat, val)
 
     await ws_manager.broadcast(
         event,

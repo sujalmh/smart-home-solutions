@@ -183,6 +183,34 @@ Meaning:
 Binding behavior:
 - `drg=` always produces `slave_seen`.
 - `register` is only emitted after `bind_slave`.
+ - Backend keeps a TTL-based cache for discovery.
+
+## Sequence Diagrams
+
+Discovery
+```
+Slave -> Master: UDP drg=slave_id;ip
+Master -> Backend: WebSocket slave_seen {serverID, clientID, ip}
+Backend -> App: GET /gateway/seen returns slave
+```
+
+Binding
+```
+App -> Backend: POST /bind {server_id, client_id}
+Backend -> Master: WebSocket bind_slave {serverID, clientID}
+Master -> Backend: WebSocket register {serverID, clientID, ip}
+Backend -> App: GET /bound returns slave
+```
+
+Switch Toggle (app + physical)
+```
+App -> Backend: POST /command
+Backend -> Master: WebSocket command
+Master -> Slave: HTTP usrcmd
+Slave -> Master: TCP res=/sta=
+Master -> Backend: WebSocket response/staresult
+Backend -> App: WebSocket response/staresult
+```
 
 ## Backend to Master ESP32 Gateway
 
