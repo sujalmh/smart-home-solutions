@@ -153,9 +153,8 @@ void handleCommand() {
 
   int stat = statStr.toInt();
   applyRelayState(index, stat);
-  sendStatus(index);
-
   server.send(200, "text/plain", "ok");
+  sendStatus(index);
 }
 
 void handleStatusRequest() {
@@ -193,8 +192,8 @@ void handleStatusRequest() {
     return;
   }
 
-  sendStatus(index);
   server.send(200, "text/plain", "ok");
+  sendStatus(index);
 }
 
 void ensureRegistration() {

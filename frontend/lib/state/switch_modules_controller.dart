@@ -50,12 +50,6 @@ class SwitchModulesController
           val: value,
         ),
       );
-
-      await deviceRepository.requestStatus(
-        serverId: serverId,
-        devId: clientId,
-        comp: compId,
-      );
     } catch (_) {
       _pending.remove(compId);
       _notifyPending();

@@ -58,6 +58,9 @@ const bool LOG_VERBOSE = true;
 const bool REQUIRE_BINDING = true;
 const uint16_t UDP_DISCOVERY_PORT = 6000;
 const unsigned long SEEN_TTL_MS = 30000;
+const unsigned long COMMAND_COOLDOWN_MS = 300;
+const unsigned long STATUS_COOLDOWN_MS = 1000;
+const unsigned long STATUS_FANOUT_DELAY_MS = 150;
 
 // Slave mapping
 struct SlaveEntry {
@@ -68,6 +71,8 @@ struct SlaveEntry {
 static const size_t MAX_SLAVES = 32;
 SlaveEntry slaves[MAX_SLAVES];
 size_t slaveCount = 0;
+unsigned long lastCommandMs[MAX_SLAVES];
+unsigned long lastStatusMs[MAX_SLAVES];
 
 static const size_t MAX_PENDING = 32;
 String pendingSlaves[MAX_PENDING];
@@ -157,6 +162,15 @@ String findSlaveIp(const String& id) {
   return String();
 }
 
+int findSlaveIndex(const String& id) {
+  for (size_t i = 0; i < slaveCount; i++) {
+    if (slaves[i].id == id) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
 String findSeenIp(const String& id) {
   for (size_t i = 0; i < seenCount; i++) {
     if (seenIds[i] == id) {
@@ -215,6 +229,8 @@ void upsertSlave(const String& id, const String& ip) {
   }
   if (slaveCount < MAX_SLAVES) {
     slaves[slaveCount++] = {id, ip};
+    lastCommandMs[slaveCount - 1] = 0;
+    lastStatusMs[slaveCount - 1] = 0;
   }
 }
 
@@ -227,7 +243,7 @@ bool sendHttpGet(const String& ip, const String& path) {
   HTTPClient http;
   String url = "http://" + ip + ":" + String(SLAVE_HTTP_PORT) + path;
   logLine("HTTP GET -> " + url);
-  http.setTimeout(3000);
+  http.setTimeout(5000);
   if (!http.begin(client, url)) {
     logLine("HTTP begin failed");
     return false;
@@ -240,6 +256,22 @@ bool sendHttpGet(const String& ip, const String& path) {
   }
   http.end();
   return code > 0 && code < 400;
+}
+
+String urlEncode(const String& value) {
+  String encoded;
+  for (size_t i = 0; i < value.length(); i++) {
+    char c = value[i];
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded += c;
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", static_cast<unsigned char>(c));
+      encoded += buf;
+    }
+  }
+  return encoded;
 }
   
 void emitEvent(const char* eventName, const JsonDocument& doc) {
@@ -454,8 +486,18 @@ void sendCommandToSlave(const String& devId, const String& comp, int mod, int st
     logLine("Command skip: unknown slave " + devId);
     return;
   }
-  String path = "/?usrcmd=" + devId + ";" + comp + ";" + String(mod) + ";" +
-                String(stat) + ";" + String(val) + ";";
+  int idx = findSlaveIndex(devId);
+  unsigned long now = millis();
+  if (idx >= 0 && now - lastCommandMs[idx] < COMMAND_COOLDOWN_MS) {
+    logLine("Command skip: cooldown " + devId);
+    return;
+  }
+  if (idx >= 0) {
+    lastCommandMs[idx] = now;
+  }
+  String payload = devId + ";" + comp + ";" + String(mod) + ";" + String(stat) + ";" +
+                   String(val) + ";";
+  String path = "/?usrcmd=" + urlEncode(payload);
   sendHttpGet(ip, path);
 }
 
@@ -465,7 +507,17 @@ void sendStatusToSlave(const String& devId, const String& comp) {
     logLine("Status skip: unknown slave " + devId);
     return;
   }
-  String path = "/?usrini=" + devId + ";" + comp;
+  int idx = findSlaveIndex(devId);
+  unsigned long now = millis();
+  if (idx >= 0 && now - lastStatusMs[idx] < STATUS_COOLDOWN_MS) {
+    logLine("Status skip: cooldown " + devId);
+    return;
+  }
+  if (idx >= 0) {
+    lastStatusMs[idx] = now;
+  }
+  String payload = devId + ";" + comp;
+  String path = "/?usrini=" + urlEncode(payload);
   sendHttpGet(ip, path);
 }
 
@@ -493,8 +545,12 @@ void handleStatus(JsonObject data) {
   if (comp.length() == 0) {
     logLine("WebSocket status dev=" + devId + " comp=*" );
     sendStatusToSlave(devId, "Comp0");
+    delay(STATUS_FANOUT_DELAY_MS);
     sendStatusToSlave(devId, "Comp1");
+    delay(STATUS_FANOUT_DELAY_MS);
     sendStatusToSlave(devId, "Comp2");
+    delay(STATUS_FANOUT_DELAY_MS);
+    sendStatusToSlave(devId, "Comp3");
   } else {
     logLine("WebSocket status dev=" + devId + " comp=" + comp);
     sendStatusToSlave(devId, comp);
