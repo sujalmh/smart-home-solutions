@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/client_repository.dart';
@@ -11,6 +13,7 @@ class SwitchModulesController
   final ClientRepository clientRepository;
   final DeviceRepository deviceRepository;
   final Map<String, bool> _pending = {};
+  final Map<String, Timer> _pendingTimers = {};
 
   SwitchModulesController({
     required this.clientId,
@@ -38,7 +41,8 @@ class SwitchModulesController
     required int value,
   }) async {
     _pending[compId] = true;
-    _notifyPending();
+    _applyOptimistic(compId, mode, status, value);
+    _schedulePendingTimeout(compId);
     try {
       await deviceRepository.sendCommand(
         DeviceCommand(
@@ -51,8 +55,7 @@ class SwitchModulesController
         ),
       );
     } catch (_) {
-      _pending.remove(compId);
-      _notifyPending();
+      _clearPending(compId);
       rethrow;
     }
   }
@@ -73,7 +76,7 @@ class SwitchModulesController
     final status = (data['stat'] as num?)?.toInt() ?? 0;
     final value = (data['val'] as num?)?.toInt() ?? 0;
 
-    _pending.remove(compId);
+    _clearPending(compId);
 
     final modules = state.value ?? [];
     final exists = modules.any((module) => module.compId == compId);
@@ -111,6 +114,38 @@ class SwitchModulesController
   void _notifyPending() {
     final modules = List<SwitchModule>.from(state.value ?? []);
     state = AsyncValue.data(modules);
+  }
+
+  void _applyOptimistic(String compId, int mode, int status, int value) {
+    final modules = state.value ?? [];
+    final updated = modules
+        .map(
+          (module) => module.compId == compId
+              ? SwitchModule(
+                  clientId: module.clientId,
+                  compId: module.compId,
+                  mode: mode,
+                  status: status,
+                  value: value,
+                )
+              : module,
+        )
+        .toList();
+    state = AsyncValue.data(updated);
+  }
+
+  void _schedulePendingTimeout(String compId) {
+    _pendingTimers[compId]?.cancel();
+    _pendingTimers[compId] = Timer(const Duration(seconds: 5), () {
+      _clearPending(compId);
+      load();
+    });
+  }
+
+  void _clearPending(String compId) {
+    _pending.remove(compId);
+    _pendingTimers.remove(compId)?.cancel();
+    _notifyPending();
   }
 
   String _normalizeId(String devId) {
