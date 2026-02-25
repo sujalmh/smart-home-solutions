@@ -6,6 +6,7 @@ import '../../state/providers.dart';
 import 'config_screen.dart';
 import 'network_devices_screen.dart';
 import 'remote_login_screen.dart';
+import 'rooms_dashboard_screen.dart';
 import 'room_switches_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -32,6 +33,12 @@ class HomeScreen extends ConsumerWidget {
                 _Header(
                   onLogin: () =>
                       Navigator.pushNamed(context, RemoteLoginScreen.routeName),
+                  onRooms: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RoomsDashboardScreen(),
+                    ),
+                  ),
                   onRefresh: () => ref.refresh(serversProvider),
                 ),
                 const SizedBox(height: 16),
@@ -106,9 +113,14 @@ class HomeScreen extends ConsumerWidget {
 
 class _Header extends StatelessWidget {
   final VoidCallback onLogin;
+  final VoidCallback onRooms;
   final VoidCallback onRefresh;
 
-  const _Header({required this.onLogin, required this.onRefresh});
+  const _Header({
+    required this.onLogin,
+    required this.onRooms,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +155,11 @@ class _Header extends StatelessWidget {
           onPressed: onLogin,
           icon: const Icon(Icons.person_outline),
           tooltip: 'Account',
+        ),
+        IconButton(
+          onPressed: onRooms,
+          icon: const Icon(Icons.grid_view_outlined),
+          tooltip: 'Rooms',
         ),
       ],
     );

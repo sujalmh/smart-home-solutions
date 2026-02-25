@@ -142,4 +142,21 @@ class DeviceRepository {
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
   }
+
+  Future<void> sendRoomCommand({
+    required String roomId,
+    required String deviceId,
+    required String comp,
+    required int mod,
+    required int stat,
+    required int val,
+  }) async {
+    await api.postJson('/api/rooms/$roomId/devices/$deviceId/commands', {
+      'comp': comp,
+      'mod': mod,
+      'stat': stat,
+      'val': val,
+      'source': 'api',
+    });
+  }
 }

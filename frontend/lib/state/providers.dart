@@ -6,13 +6,17 @@ import '../data/socket_client.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/client_repository.dart';
 import '../data/repositories/device_repository.dart';
+import '../data/repositories/room_repository.dart';
 import '../data/repositories/server_repository.dart';
 import 'auth_controller.dart';
 import 'auth_state.dart';
 import 'switch_modules_controller.dart';
+import '../models/home.dart';
 import '../models/switch_module.dart';
 import '../models/server.dart';
 import '../models/client.dart';
+import '../models/room.dart';
+import '../models/room_device.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) {
   return AppConfig.production();
@@ -70,6 +74,28 @@ final clientsProvider = FutureProvider.family<List<Client>, String>((
 
 final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
   return DeviceRepository(api: ref.watch(apiClientProvider));
+});
+
+final roomRepositoryProvider = Provider<RoomRepository>((ref) {
+  return RoomRepository(api: ref.watch(apiClientProvider));
+});
+
+final homesProvider = FutureProvider<List<Home>>((ref) async {
+  return ref.watch(roomRepositoryProvider).listHomes();
+});
+
+final roomsProvider = FutureProvider.family<List<Room>, String>((
+  ref,
+  homeId,
+) async {
+  return ref.watch(roomRepositoryProvider).listRooms(homeId);
+});
+
+final roomDevicesProvider = FutureProvider.family<List<RoomDevice>, String>((
+  ref,
+  roomId,
+) async {
+  return ref.watch(roomRepositoryProvider).listRoomDevices(roomId);
 });
 
 final gatewayStatusProvider = FutureProvider.family<bool, String>((
