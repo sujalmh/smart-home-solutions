@@ -13,6 +13,8 @@ class AuthState {
     this.errorMessage,
   });
 
+  bool get isAuthenticated => token != null && token!.isNotEmpty;
+
   AuthState copyWith({
     bool? isLoading,
     String? token,

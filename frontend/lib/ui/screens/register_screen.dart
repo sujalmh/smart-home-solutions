@@ -35,7 +35,7 @@ class RegisterScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Use a gateway to discover devices or configure WiFi.',
+              'Use a gateway to discover devices and configure remote control.',
               style: TextStyle(color: Colors.black.withOpacity(0.6)),
             ),
             const SizedBox(height: 20),

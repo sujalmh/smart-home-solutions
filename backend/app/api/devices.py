@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.client import Client
 from ..models.server import Server
 from ..models.switch_module import SwitchModule
+from ..models.user import User
 from ..schemas.device import (
     DeviceBindRequest,
     DeviceClientConfigRequest,
@@ -24,7 +26,6 @@ from ..websocket.server import (
     emit_gateway_command,
     emit_gateway_status,
     emit_gateway_unbind,
-    is_seen_recent,
     is_gateway_connected,
     list_seen_slaves,
 )
@@ -79,6 +80,7 @@ async def device_command(
     server_id: str,
     payload: DeviceCommandRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceCommandResponse:
     normalized_server_id = _normalize_id(server_id)
     server = await session.get(Server, normalized_server_id)
@@ -96,11 +98,11 @@ async def device_command(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
 
-    if not is_seen_recent(normalized_server_id, payload.dev_id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_offline")
+    if client.server_id not in {normalized_server_id, server_id}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_unbound")
 
-    if not is_seen_recent(normalized_server_id, payload.dev_id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_offline")
+    if not is_gateway_connected(normalized_server_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
 
     await emit_gateway_command(
         normalized_server_id,
@@ -127,6 +129,7 @@ async def device_status(
     server_id: str,
     payload: DeviceStatusRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[SwitchModuleRead]:
     normalized_server_id = _normalize_id(server_id)
     server = await session.get(Server, normalized_server_id)
@@ -159,6 +162,7 @@ async def config_server(
     server_id: str,
     payload: DeviceServerConfigRequest | None = None,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     existing = await session.get(Server, normalized_server_id)
@@ -182,6 +186,7 @@ async def config_remote(
     server_id: str,
     payload: DeviceRemoteConfigRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     server = await session.get(Server, normalized_server_id)
@@ -195,6 +200,7 @@ async def config_client(
     server_id: str,
     payload: DeviceClientConfigRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     normalized_client_id = _normalize_id(payload.client_id)
@@ -224,6 +230,7 @@ async def register_device(
     server_id: str,
     payload: DeviceRegisterRequest | None = None,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     existing = await session.get(Server, normalized_server_id)
@@ -240,7 +247,10 @@ async def register_device(
 
 
 @router.get("/{server_id}/gateway/status")
-async def gateway_status(server_id: str) -> dict:
+async def gateway_status(
+    server_id: str,
+    _current_user: User = Depends(get_current_user),
+) -> dict:
     normalized_server_id = _normalize_id(server_id)
     return {"online": is_gateway_connected(normalized_server_id)}
 
@@ -249,6 +259,7 @@ async def gateway_status(server_id: str) -> dict:
 async def gateway_seen(
     server_id: str,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[dict[str, str]]:
     normalized_server_id = _normalize_id(server_id)
     seen = await list_seen_slaves(normalized_server_id)
@@ -268,6 +279,7 @@ async def gateway_seen(
 async def bound_devices(
     server_id: str,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[ClientRead]:
     normalized_server_id = _normalize_id(server_id)
     result = await session.execute(
@@ -282,6 +294,7 @@ async def gateway_bind(
     server_id: str,
     payload: DeviceBindRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     normalized_client_id = _normalize_id(payload.client_id)
@@ -319,6 +332,7 @@ async def gateway_unbind(
     server_id: str,
     payload: DeviceBindRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> DeviceConfigResponse:
     normalized_server_id = _normalize_id(server_id)
     normalized_client_id = _normalize_id(payload.client_id)

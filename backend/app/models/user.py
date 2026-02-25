@@ -9,4 +9,4 @@ class User(Base):
 
     email_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     pwd: Mapped[str] = mapped_column(String(255), nullable=False)
-    device_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    device_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

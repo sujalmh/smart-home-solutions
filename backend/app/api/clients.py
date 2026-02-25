@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.client import Client
 from ..models.switch_module import SwitchModule
+from ..models.user import User
 from ..schemas.client import ClientCreate, ClientRead
 from ..schemas.switch_module import SwitchModuleRead, SwitchModuleUpdate
 
@@ -28,6 +30,7 @@ def _alt_id(value: str) -> str | None:
 async def list_clients(
     server_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[ClientRead]:
     stmt = select(Client)
     if server_id:
@@ -45,6 +48,7 @@ async def list_clients(
 async def create_client(
     payload: ClientCreate,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> ClientRead:
     normalized_client_id = _normalize_id(payload.client_id)
     normalized_server_id = _normalize_id(payload.server_id)
@@ -82,6 +86,7 @@ async def create_client(
 async def list_modules(
     client_id: str,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[SwitchModuleRead]:
     normalized_client_id = _normalize_id(client_id)
     raw_id = _alt_id(normalized_client_id)
@@ -98,6 +103,7 @@ async def update_module(
     comp_id: str,
     payload: SwitchModuleUpdate,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> SwitchModuleRead:
     normalized_client_id = _normalize_id(client_id)
     module = await session.get(

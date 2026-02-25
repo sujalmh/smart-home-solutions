@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/providers.dart';
-import 'room_switches_screen.dart';
 
 class RemoteLoginScreen extends ConsumerStatefulWidget {
   static const routeName = '/remote-login';
@@ -16,7 +15,6 @@ class RemoteLoginScreen extends ConsumerStatefulWidget {
 class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  String? _selectedServer;
 
   @override
   void dispose() {
@@ -28,24 +26,18 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty || _selectedServer == null) {
-      _showMessage('Provide email, password, and a server.');
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage('Provide email and password.');
       return;
     }
 
     await ref
         .read(authControllerProvider.notifier)
-        .login(emailId: email, password: password, deviceId: _selectedServer);
+        .login(emailId: email, password: password);
 
     final state = ref.read(authControllerProvider);
     if (state.errorMessage == null) {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => RoomSwitchesScreen(serverId: _selectedServer!),
-        ),
-      );
+      return;
     } else {
       _showMessage(state.errorMessage!);
     }
@@ -54,18 +46,14 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
   Future<void> _register() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty || _selectedServer == null) {
-      _showMessage('Provide email, password, and a server.');
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage('Provide email and password.');
       return;
     }
 
     await ref
         .read(authControllerProvider.notifier)
-        .register(
-          emailId: email,
-          password: password,
-          deviceId: _selectedServer!,
-        );
+        .register(emailId: email, password: password);
 
     final state = ref.read(authControllerProvider);
     if (state.errorMessage == null) {
@@ -84,10 +72,9 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
-    final serversAsync = ref.watch(serversProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Remote Access')),
+      appBar: AppBar(title: const Text('Sign In')),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -102,12 +89,12 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Secure your gateway access.',
+                'Authenticate to continue.',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
-                'Use your account to manage devices remotely.',
+                'Control your home remotely from any network once signed in.',
                 style: TextStyle(color: Colors.black.withOpacity(0.6)),
               ),
               const SizedBox(height: 20),
@@ -131,35 +118,6 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
                       decoration: const InputDecoration(labelText: 'Password'),
                       obscureText: true,
                     ),
-                    const SizedBox(height: 12),
-                    serversAsync.when(
-                      data: (servers) {
-                        final items = servers
-                            .map(
-                              (server) => DropdownMenuItem<String>(
-                                value: server.serverId,
-                                child: Text(
-                                  'Gateway ${_displayId(server.serverId)}',
-                                ),
-                              ),
-                            )
-                            .toList();
-                        return DropdownButtonFormField<String>(
-                          value: _selectedServer,
-                          decoration: const InputDecoration(
-                            labelText: 'Gateway',
-                          ),
-                          items: items,
-                          onChanged: (value) =>
-                              setState(() => _selectedServer = value),
-                        );
-                      },
-                      loading: () => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: LinearProgressIndicator(),
-                      ),
-                      error: (_, __) => const Text('Unable to load gateways.'),
-                    ),
                   ],
                 ),
               ),
@@ -181,17 +139,17 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
                   ),
                 ],
               ),
+              if (authState.errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  authState.errorMessage!,
+                  style: const TextStyle(color: Color(0xFF8A3D28)),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

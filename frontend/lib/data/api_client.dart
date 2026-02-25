@@ -14,10 +14,15 @@ class ApiException implements Exception {
 
 class ApiClient {
   final String baseUrl;
+  final Map<String, String> defaultHeaders;
   final http.Client _client;
 
-  ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client();
+  ApiClient({
+    required this.baseUrl,
+    Map<String, String>? defaultHeaders,
+    http.Client? client,
+  }) : defaultHeaders = defaultHeaders ?? const {},
+       _client = client ?? http.Client();
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final uri = Uri.parse('$baseUrl$path');
@@ -32,7 +37,10 @@ class ApiClient {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
-    final response = await _client.get(_uri(path, query), headers: headers);
+    final response = await _client.get(
+      _uri(path, query),
+      headers: {...defaultHeaders, ...?headers},
+    );
     return _decodeObject(response);
   }
 
@@ -41,7 +49,10 @@ class ApiClient {
     Map<String, String>? query,
     Map<String, String>? headers,
   }) async {
-    final response = await _client.get(_uri(path, query), headers: headers);
+    final response = await _client.get(
+      _uri(path, query),
+      headers: {...defaultHeaders, ...?headers},
+    );
     return _decodeList(response);
   }
 
@@ -52,7 +63,11 @@ class ApiClient {
   }) async {
     final response = await _client.post(
       _uri(path),
-      headers: {'Content-Type': 'application/json', ...?headers},
+      headers: {
+        'Content-Type': 'application/json',
+        ...defaultHeaders,
+        ...?headers,
+      },
       body: jsonEncode(body),
     );
     return _decodeObject(response);
@@ -65,7 +80,11 @@ class ApiClient {
   }) async {
     final response = await _client.post(
       _uri(path),
-      headers: {'Content-Type': 'application/json', ...?headers},
+      headers: {
+        'Content-Type': 'application/json',
+        ...defaultHeaders,
+        ...?headers,
+      },
       body: jsonEncode(body),
     );
     return _decodeList(response);
@@ -78,7 +97,11 @@ class ApiClient {
   }) async {
     final response = await _client.put(
       _uri(path),
-      headers: {'Content-Type': 'application/json', ...?headers},
+      headers: {
+        'Content-Type': 'application/json',
+        ...defaultHeaders,
+        ...?headers,
+      },
       body: jsonEncode(body),
     );
     return _decodeObject(response);

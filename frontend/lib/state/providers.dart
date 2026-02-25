@@ -23,9 +23,20 @@ final appConfigProvider = Provider<AppConfig>((ref) {
   return AppConfig.production();
 });
 
-final apiClientProvider = Provider<ApiClient>((ref) {
+final publicApiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
   return ApiClient(baseUrl: config.baseUrl);
+});
+
+final authenticatedApiClientProvider = Provider<ApiClient>((ref) {
+  final config = ref.watch(appConfigProvider);
+  final token = ref.watch(
+    authControllerProvider.select((state) => state.token),
+  );
+  final headers = <String, String>{
+    if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+  };
+  return ApiClient(baseUrl: config.baseUrl, defaultHeaders: headers);
 });
 
 final socketClientProvider = Provider<SocketClient>((ref) {
@@ -44,11 +55,11 @@ final socketResponseProvider = StreamProvider<Map<String, dynamic>>((ref) {
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return AuthRepository(api: ref.watch(apiClientProvider));
+  return AuthRepository(api: ref.watch(publicApiClientProvider));
 });
 
 final aiRepositoryProvider = Provider<AIRepository>((ref) {
-  return AIRepository(api: ref.watch(apiClientProvider));
+  return AIRepository(api: ref.watch(authenticatedApiClientProvider));
 });
 
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
@@ -59,7 +70,7 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
 );
 
 final serverRepositoryProvider = Provider<ServerRepository>((ref) {
-  return ServerRepository(api: ref.watch(apiClientProvider));
+  return ServerRepository(api: ref.watch(authenticatedApiClientProvider));
 });
 
 final serversProvider = FutureProvider<List<Server>>((ref) async {
@@ -67,7 +78,7 @@ final serversProvider = FutureProvider<List<Server>>((ref) async {
 });
 
 final clientRepositoryProvider = Provider<ClientRepository>((ref) {
-  return ClientRepository(api: ref.watch(apiClientProvider));
+  return ClientRepository(api: ref.watch(authenticatedApiClientProvider));
 });
 
 final clientsProvider = FutureProvider.family<List<Client>, String>((
@@ -78,11 +89,11 @@ final clientsProvider = FutureProvider.family<List<Client>, String>((
 });
 
 final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
-  return DeviceRepository(api: ref.watch(apiClientProvider));
+  return DeviceRepository(api: ref.watch(authenticatedApiClientProvider));
 });
 
 final roomRepositoryProvider = Provider<RoomRepository>((ref) {
-  return RoomRepository(api: ref.watch(apiClientProvider));
+  return RoomRepository(api: ref.watch(authenticatedApiClientProvider));
 });
 
 final homesProvider = FutureProvider<List<Home>>((ref) async {

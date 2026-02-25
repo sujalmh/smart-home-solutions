@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.device import Device
 from ..models.home import Home
 from ..models.room import Room
+from ..models.user import User
 from ..schemas.room import (
     HomeRead,
     RoomDeviceCommandRequest,
@@ -22,6 +24,7 @@ router = APIRouter(tags=["rooms"])
 @router.get("/homes", response_model=list[HomeRead])
 async def list_homes(
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[HomeRead]:
     result = await session.execute(select(Home).order_by(Home.home_id))
     return list(result.scalars().all())
@@ -31,6 +34,7 @@ async def list_homes(
 async def list_rooms(
     home_id: str,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[RoomRead]:
     result = await session.execute(
         select(Room).where(Room.home_id == home_id).order_by(Room.room_id)
@@ -42,6 +46,7 @@ async def list_rooms(
 async def list_room_devices(
     room_id: str,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> list[RoomDeviceRead]:
     result = await session.execute(
         select(Device).where(Device.room_id == room_id).order_by(Device.device_id)
@@ -58,6 +63,7 @@ async def command_room_device(
     device_id: str,
     payload: RoomDeviceCommandRequest,
     session: AsyncSession = Depends(get_async_session),
+    _current_user: User = Depends(get_current_user),
 ) -> RoomDeviceCommandResponse:
     try:
         command = await send_device_command(

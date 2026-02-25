@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class RegisterRequest(BaseModel):
     email_id: str
     pwd: str
-    device_id: str
+    device_id: str | None = None
 
 
 class LoginRequest(BaseModel):

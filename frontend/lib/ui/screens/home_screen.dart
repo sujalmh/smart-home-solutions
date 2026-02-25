@@ -5,7 +5,6 @@ import '../../models/server.dart';
 import '../../state/providers.dart';
 import 'config_screen.dart';
 import 'network_devices_screen.dart';
-import 'remote_login_screen.dart';
 import 'rooms_dashboard_screen.dart';
 import 'room_switches_screen.dart';
 import 'assistant_panel_screen.dart';
@@ -32,8 +31,8 @@ class HomeScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Header(
-                  onLogin: () =>
-                      Navigator.pushNamed(context, RemoteLoginScreen.routeName),
+                  onLogout: () =>
+                      ref.read(authControllerProvider.notifier).logout(),
                   onAssistant: () => Navigator.pushNamed(
                     context,
                     AssistantPanelScreen.routeName,
@@ -48,7 +47,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Gateways on your network',
+                  'Gateways linked to your account',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -57,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Devices appear automatically when the master gateway is online.',
+                  'Remote control works when your gateway is online and reachable by backend.',
                   style: TextStyle(color: Colors.black.withOpacity(0.6)),
                 ),
                 const SizedBox(height: 18),
@@ -117,13 +116,13 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class _Header extends StatelessWidget {
-  final VoidCallback onLogin;
+  final VoidCallback onLogout;
   final VoidCallback onAssistant;
   final VoidCallback onRooms;
   final VoidCallback onRefresh;
 
   const _Header({
-    required this.onLogin,
+    required this.onLogout,
     required this.onAssistant,
     required this.onRooms,
     required this.onRefresh,
@@ -159,9 +158,9 @@ class _Header extends StatelessWidget {
           tooltip: 'Refresh',
         ),
         IconButton(
-          onPressed: onLogin,
-          icon: const Icon(Icons.person_outline),
-          tooltip: 'Account',
+          onPressed: onLogout,
+          icon: const Icon(Icons.logout),
+          tooltip: 'Logout',
         ),
         IconButton(
           onPressed: onAssistant,
