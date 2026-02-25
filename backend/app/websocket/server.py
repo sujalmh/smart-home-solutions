@@ -124,6 +124,7 @@ class WebSocketManager:
         self._seen: dict[str, dict[str, tuple[str, float]]] = {}
         self._lock = asyncio.Lock()
         self._seen_ttl = 30.0
+        self._last_update: dict[tuple[str, str], tuple[int, int, int, float]] = {}
 
     async def add_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -197,6 +198,29 @@ class WebSocketManager:
             }
         return [{"clientID": client_id, "ip": ip} for client_id, ip in filtered.items()]
 
+    def is_seen_recent(self, server_id: str, client_id: str) -> bool:
+        now = time.monotonic()
+        bucket = self._seen.get(server_id, {})
+        entry = bucket.get(client_id)
+        if not entry:
+            return False
+        _, seen_at = entry
+        return now - seen_at <= self._seen_ttl
+
+    def should_accept_update(
+        self, client_id: str, comp: str, mod: int, stat: int, val: int
+    ) -> bool:
+        now = time.monotonic()
+        key = (client_id, comp)
+        last = self._last_update.get(key)
+        if last:
+            last_mod, last_stat, last_val, last_ts = last
+            if last_mod == mod and last_stat == stat and last_val == val:
+                if now - last_ts < 0.5:
+                    return False
+        self._last_update[key] = (mod, stat, val, now)
+        return True
+
     @staticmethod
     def _is_connected(websocket: WebSocket) -> bool:
         return websocket.client_state == WebSocketState.CONNECTED
@@ -268,6 +292,14 @@ def is_gateway_connected(server_id: str | None) -> bool:
     if not wire_server_id:
         return False
     return ws_manager.is_gateway_connected(wire_server_id)
+
+
+def is_seen_recent(server_id: str | None, client_id: str | None) -> bool:
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return False
+    return ws_manager.is_seen_recent(wire_server_id, wire_client_id)
 
 
 async def list_seen_slaves(server_id: str | None) -> list[dict[str, str]]:
@@ -353,15 +385,22 @@ async def _handle_status_event(event: str, data: dict) -> None:
     if not isinstance(dev_id, str) or not isinstance(comp, str):
         return
 
+    if not ws_manager.should_accept_update(dev_id, comp, mod, stat, val):
+        return
+
     async with AsyncSessionLocal() as session:
         client = await _get_client(session, dev_id)
         if not client:
             return
         await _upsert_module(session, client.client_id, comp, mod, stat, val)
 
+    ts = data.get("ts")
+    if not isinstance(ts, (int, float)):
+        ts = int(time.time() * 1000)
+
     await ws_manager.broadcast(
         event,
-        {"devID": dev_id, "comp": comp, "mod": mod, "stat": stat, "val": val},
+        {"devID": dev_id, "comp": comp, "mod": mod, "stat": stat, "val": val, "ts": ts},
     )
 
 

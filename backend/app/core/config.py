@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    ai_confidence_threshold: float = 0.65
+    ai_memory_ttl_seconds: int = 900
+    ai_high_risk_confirmation_required: bool = True
+    ai_rate_limit_per_minute: int = 20
 
     def cors_origin_list(self) -> list[str]:
         if not self.cors_origins:

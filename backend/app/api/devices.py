@@ -24,6 +24,7 @@ from ..websocket.server import (
     emit_gateway_command,
     emit_gateway_status,
     emit_gateway_unbind,
+    is_seen_recent,
     is_gateway_connected,
     list_seen_slaves,
 )
@@ -94,6 +95,12 @@ async def device_command(
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
+
+    if not is_seen_recent(normalized_server_id, payload.dev_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_offline")
+
+    if not is_seen_recent(normalized_server_id, payload.dev_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_offline")
 
     await emit_gateway_command(
         normalized_server_id,

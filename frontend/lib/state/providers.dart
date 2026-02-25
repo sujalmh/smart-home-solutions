@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import '../data/api_client.dart';
 import '../data/socket_client.dart';
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/ai_repository.dart';
 import '../data/repositories/client_repository.dart';
 import '../data/repositories/device_repository.dart';
 import '../data/repositories/room_repository.dart';
@@ -44,6 +45,10 @@ final socketResponseProvider = StreamProvider<Map<String, dynamic>>((ref) {
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(api: ref.watch(apiClientProvider));
+});
+
+final aiRepositoryProvider = Provider<AIRepository>((ref) {
+  return AIRepository(api: ref.watch(apiClientProvider));
 });
 
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(

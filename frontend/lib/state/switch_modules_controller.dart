@@ -14,6 +14,7 @@ class SwitchModulesController
   final DeviceRepository deviceRepository;
   final Map<String, bool> _pending = {};
   final Map<String, Timer> _pendingTimers = {};
+  final Map<String, int> _lastTs = {};
 
   SwitchModulesController({
     required this.clientId,
@@ -75,6 +76,14 @@ class SwitchModulesController
     final mode = (data['mod'] as num?)?.toInt() ?? 0;
     final status = (data['stat'] as num?)?.toInt() ?? 0;
     final value = (data['val'] as num?)?.toInt() ?? 0;
+    final ts = (data['ts'] as num?)?.toInt();
+    if (ts != null) {
+      final lastTs = _lastTs[compId];
+      if (lastTs != null && ts <= lastTs) {
+        return;
+      }
+      _lastTs[compId] = ts;
+    }
 
     _clearPending(compId);
 
@@ -118,6 +127,7 @@ class SwitchModulesController
 
   void _applyOptimistic(String compId, int mode, int status, int value) {
     final modules = state.value ?? [];
+    final exists = modules.any((module) => module.compId == compId);
     final updated = modules
         .map(
           (module) => module.compId == compId
@@ -131,6 +141,17 @@ class SwitchModulesController
               : module,
         )
         .toList();
+    if (!exists) {
+      updated.add(
+        SwitchModule(
+          clientId: clientId,
+          compId: compId,
+          mode: mode,
+          status: status,
+          value: value,
+        ),
+      );
+    }
     state = AsyncValue.data(updated);
   }
 

@@ -29,6 +29,14 @@
 
 ## Phase 4 - Intelligence + Voice + Safety
 
+### Locked implementation profile (2026-02-26)
+
+- [x] Use `LangGraph` from day 1 for AI orchestration flow.
+- [x] Use `LangChain + OpenAI` provider backend.
+- [x] Default model: `gpt-4o-mini`.
+- [x] Conversation model: single active assistant conversation.
+- [x] Memory persistence: SQLite-backed row/table (not in-memory only).
+
 - [ ] Implement NLU pipeline (intent classification + entity extraction) with confidence thresholds and fallback behavior.
 - [ ] Add command resolver for canonical `home/room/device` mapping and ambiguity clarification flow.
 - [ ] Add multi-turn context/session memory (last room/device, follow-up resolution, expiry policy).

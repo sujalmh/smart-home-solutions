@@ -8,6 +8,7 @@ import 'network_devices_screen.dart';
 import 'remote_login_screen.dart';
 import 'rooms_dashboard_screen.dart';
 import 'room_switches_screen.dart';
+import 'assistant_panel_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,10 @@ class HomeScreen extends ConsumerWidget {
                 _Header(
                   onLogin: () =>
                       Navigator.pushNamed(context, RemoteLoginScreen.routeName),
+                  onAssistant: () => Navigator.pushNamed(
+                    context,
+                    AssistantPanelScreen.routeName,
+                  ),
                   onRooms: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -113,11 +118,13 @@ class HomeScreen extends ConsumerWidget {
 
 class _Header extends StatelessWidget {
   final VoidCallback onLogin;
+  final VoidCallback onAssistant;
   final VoidCallback onRooms;
   final VoidCallback onRefresh;
 
   const _Header({
     required this.onLogin,
+    required this.onAssistant,
     required this.onRooms,
     required this.onRefresh,
   });
@@ -155,6 +162,11 @@ class _Header extends StatelessWidget {
           onPressed: onLogin,
           icon: const Icon(Icons.person_outline),
           tooltip: 'Account',
+        ),
+        IconButton(
+          onPressed: onAssistant,
+          icon: const Icon(Icons.smart_toy_outlined),
+          tooltip: 'Assistant',
         ),
         IconButton(
           onPressed: onRooms,

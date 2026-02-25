@@ -6,6 +6,8 @@ from .home import Home
 from .room import Room
 from .device import Device
 from .device_log import DeviceLog
+from .ai_conversation import AIConversation
+from .ai_audit_log import AIAuditLog
 
 __all__ = [
     "User",
@@ -16,4 +18,6 @@ __all__ = [
     "Room",
     "Device",
     "DeviceLog",
+    "AIConversation",
+    "AIAuditLog",
 ]

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'ui/screens/home_screen.dart';
+import 'ui/screens/assistant_panel_screen.dart';
 import 'ui/screens/remote_login_screen.dart';
 import 'ui/screens/register_screen.dart';
 import 'ui/screens/select_device_screen.dart';
@@ -35,6 +36,7 @@ class SmartHomeApp extends StatelessWidget {
       ),
       home: const HomeScreen(),
       routes: {
+        AssistantPanelScreen.routeName: (_) => const AssistantPanelScreen(),
         RemoteLoginScreen.routeName: (_) => const RemoteLoginScreen(),
         RegisterScreen.routeName: (_) => const RegisterScreen(),
         SelectDeviceScreen.routeName: (_) => const SelectDeviceScreen(),
