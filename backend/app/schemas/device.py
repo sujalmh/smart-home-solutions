@@ -10,6 +10,7 @@ class DeviceCommandRequest(BaseModel):
     mod: int = Field(ge=0, le=1)
     stat: int = Field(ge=0, le=1)
     val: int = Field(ge=0, le=1000)
+    req_id: str | None = Field(default=None, alias="reqId")
 
 
 class DeviceCommandResponse(DeviceCommandRequest):

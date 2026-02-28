@@ -25,6 +25,7 @@ class DeviceRepository {
           'mod': command.mod,
           'stat': command.stat,
           'val': command.val,
+          'reqId': ?command.reqId,
         });
     return DeviceCommand(
       serverId: response['serverID'] as String,
@@ -33,6 +34,7 @@ class DeviceRepository {
       mod: (response['mod'] as num).toInt(),
       stat: (response['stat'] as num).toInt(),
       val: (response['val'] as num).toInt(),
+      reqId: response['reqId']?.toString(),
     );
   }
 

@@ -58,9 +58,10 @@ const bool LOG_VERBOSE = true;
 const bool REQUIRE_BINDING = true;
 const uint16_t UDP_DISCOVERY_PORT = 6000;
 const unsigned long SEEN_TTL_MS = 30000;
-const unsigned long COMMAND_COOLDOWN_MS = 150;
-const unsigned long STATUS_COOLDOWN_MS = 250;
+const unsigned long COMMAND_COOLDOWN_MS = 120;
+const unsigned long STATUS_COOLDOWN_MS = 600;
 const unsigned long STATUS_FANOUT_DELAY_MS = 120;
+const unsigned long COMMAND_RETRY_DELAY_MS = 180;
 
 // Slave mapping
 struct SlaveEntry {
@@ -92,6 +93,21 @@ size_t seenCount = 0;
 WiFiServer tcpServer(TCP_PORT);
 WebSocketsClient webSocket;
 WiFiUDP udp;
+
+struct CommandSlot {
+  bool used;
+  String devId;
+  String comp;
+  int mod;
+  int stat;
+  int val;
+  String reqId;
+  uint8_t attempts;
+  unsigned long nextAtMs;
+};
+
+static const size_t MAX_COMMAND_SLOTS = 32;
+CommandSlot commandSlots[MAX_COMMAND_SLOTS];
 
 struct StatusFanoutState {
   bool active;
@@ -185,6 +201,81 @@ int findSlaveIndex(const String& id) {
   return -1;
 }
 
+int findCommandSlot(const String& devId, const String& comp) {
+  for (size_t i = 0; i < MAX_COMMAND_SLOTS; i++) {
+    if (!commandSlots[i].used) {
+      continue;
+    }
+    if (commandSlots[i].devId == devId && commandSlots[i].comp == comp) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+int findFreeCommandSlot() {
+  for (size_t i = 0; i < MAX_COMMAND_SLOTS; i++) {
+    if (!commandSlots[i].used) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+void clearCommandSlot(int index) {
+  if (index < 0 || index >= static_cast<int>(MAX_COMMAND_SLOTS)) {
+    return;
+  }
+  commandSlots[index].used = false;
+  commandSlots[index].devId = "";
+  commandSlots[index].comp = "";
+  commandSlots[index].mod = 0;
+  commandSlots[index].stat = 0;
+  commandSlots[index].val = 0;
+  commandSlots[index].reqId = "";
+  commandSlots[index].attempts = 0;
+  commandSlots[index].nextAtMs = 0;
+}
+
+void enqueueCommandToSlave(
+    const String& devId,
+    const String& comp,
+    int mod,
+    int stat,
+    int val,
+    const String& reqId) {
+  if (devId.length() == 0 || comp.length() == 0) {
+    return;
+  }
+
+  int index = findCommandSlot(devId, comp);
+  bool replacing = index >= 0;
+  if (index < 0) {
+    index = findFreeCommandSlot();
+  }
+
+  if (index < 0) {
+    logLine("Command drop: queue full " + devId + " " + comp);
+    return;
+  }
+
+  commandSlots[index].used = true;
+  commandSlots[index].devId = devId;
+  commandSlots[index].comp = comp;
+  commandSlots[index].mod = mod;
+  commandSlots[index].stat = stat;
+  commandSlots[index].val = val;
+  commandSlots[index].reqId = reqId;
+  commandSlots[index].attempts = 0;
+  commandSlots[index].nextAtMs = millis();
+
+  if (replacing) {
+    logLine("Command coalesce replace " + devId + " " + comp);
+  } else {
+    logLine("Command queued " + devId + " " + comp);
+  }
+}
+
 String findSeenIp(const String& id) {
   for (size_t i = 0; i < seenCount; i++) {
     if (seenIds[i] == id) {
@@ -253,7 +344,7 @@ void upsertSlave(const String& id, const String& ip) {
   }
 }
 
-bool sendHttpGet(const String& ip, const String& path) {
+bool sendHttpGet(const String& ip, const String& path, int attempts, int timeoutMs) {
   if (ip.length() == 0) {
     logLine("HTTP skip: missing slave IP");
     return false;
@@ -261,11 +352,12 @@ bool sendHttpGet(const String& ip, const String& path) {
   String url = "http://" + ip + ":" + String(SLAVE_HTTP_PORT) + path;
   logLine("HTTP GET -> " + url);
 
-  static const int HTTP_ATTEMPTS = 2;
-  for (int attempt = 0; attempt < HTTP_ATTEMPTS; attempt++) {
+  int effectiveAttempts = attempts > 0 ? attempts : 1;
+  int effectiveTimeoutMs = timeoutMs > 0 ? timeoutMs : 900;
+  for (int attempt = 0; attempt < effectiveAttempts; attempt++) {
     WiFiClient client;
     HTTPClient http;
-    http.setTimeout(1200);
+    http.setTimeout(effectiveTimeoutMs);
     if (!http.begin(client, url)) {
       logLine("HTTP begin failed");
       return false;
@@ -280,7 +372,7 @@ bool sendHttpGet(const String& ip, const String& path) {
 
     logLine("HTTP error: " + http.errorToString(code));
     http.end();
-    if (attempt + 1 < HTTP_ATTEMPTS) {
+    if (attempt + 1 < effectiveAttempts) {
       delay(30);
       webSocket.loop();
     }
@@ -415,24 +507,42 @@ void handleUdpDiscovery() {
   }
 }
 
-void emitStaResult(const String& devId, const String& comp, int mod, int stat, int val) {
+void emitStaResult(
+    const String& devId,
+    const String& comp,
+    int mod,
+    int stat,
+    int val,
+    const String& reqId) {
   DynamicJsonDocument doc(256);
   doc["devID"] = devId;
   doc["comp"] = comp;
   doc["mod"] = mod;
   doc["stat"] = stat;
   doc["val"] = val;
+  if (reqId.length() > 0) {
+    doc["reqId"] = reqId;
+  }
   logLine("WebSocket emit staresult dev=" + devId + " comp=" + comp);
   emitEvent("staresult", doc);
 }
 
-void emitResponse(const String& devId, const String& comp, int mod, int stat, int val) {
+void emitResponse(
+    const String& devId,
+    const String& comp,
+    int mod,
+    int stat,
+    int val,
+    const String& reqId) {
   DynamicJsonDocument doc(256);
   doc["devID"] = devId;
   doc["comp"] = comp;
   doc["mod"] = mod;
   doc["stat"] = stat;
   doc["val"] = val;
+  if (reqId.length() > 0) {
+    doc["reqId"] = reqId;
+  }
   logLine("WebSocket emit response dev=" + devId + " comp=" + comp);
   emitEvent("response", doc);
 }
@@ -463,8 +573,8 @@ void handleTcpLine(const String& line, const String& remoteIp) {
 
   if (line.startsWith("sta=") || line.startsWith("res=") || line.startsWith("dst=")) {
     String payload = line.substring(4);
-    String tokens[5];
-    int count = splitTokens(payload, ';', tokens, 5);
+    String tokens[6];
+    int count = splitTokens(payload, ';', tokens, 6);
     if (count < 2) {
       return;
     }
@@ -490,14 +600,15 @@ void handleTcpLine(const String& line, const String& remoteIp) {
     int mod = toIntSafe(tokens[2], 0);
     int stat = toIntSafe(tokens[3], 0);
     int val = toIntSafe(tokens[4], 0);
+    String reqId = count >= 6 ? tokens[5] : "";
     if (val > 1000) {
       val = 1000;
     }
 
     if (line.startsWith("res=")) {
-      emitResponse(clientId, comp, mod, stat, val);
+      emitResponse(clientId, comp, mod, stat, val, reqId);
     } else {
-      emitStaResult(clientId, comp, mod, stat, val);
+      emitStaResult(clientId, comp, mod, stat, val, reqId);
     }
   }
 }
@@ -515,6 +626,7 @@ void handleTcpClients() {
 
     while (client.connected() || client.available()) {
       webSocket.loop();
+      processCommandQueue();
       processStatusFanout();
       while (client.available()) {
         String line = client.readStringUntil('\n');
@@ -535,11 +647,11 @@ void handleTcpClients() {
   }
 }
 
-void sendCommandToSlave(const String& devId, const String& comp, int mod, int stat, int val) {
+bool sendCommandToSlave(const String& devId, const String& comp, int mod, int stat, int val, const String& reqId) {
   String ip = findSlaveIp(devId);
   if (ip.length() == 0) {
     logLine("Command skip: unknown slave " + devId);
-    return;
+    return false;
   }
   int idx = findSlaveIndex(devId);
   unsigned long now = millis();
@@ -551,7 +663,7 @@ void sendCommandToSlave(const String& devId, const String& comp, int mod, int st
         lastCommandVal[idx] == val;
     if (samePayload) {
       logLine("Command skip: cooldown " + devId + " " + comp);
-      return;
+      return true;
     }
   }
   if (idx >= 0) {
@@ -563,8 +675,11 @@ void sendCommandToSlave(const String& devId, const String& comp, int mod, int st
   }
   String payload = devId + ";" + comp + ";" + String(mod) + ";" + String(stat) + ";" +
                    String(val) + ";";
+  if (reqId.length() > 0) {
+    payload += reqId + ";";
+  }
   String path = "/?usrcmd=" + urlEncode(payload);
-  sendHttpGet(ip, path);
+  return sendHttpGet(ip, path, 2, 900);
 }
 
 void sendStatusToSlave(const String& devId, const String& comp) {
@@ -587,7 +702,54 @@ void sendStatusToSlave(const String& devId, const String& comp) {
   }
   String payload = devId + ";" + comp + ";";
   String path = "/?usrini=" + urlEncode(payload);
-  sendHttpGet(ip, path);
+  sendHttpGet(ip, path, 1, 700);
+}
+
+void processCommandQueue() {
+  unsigned long now = millis();
+  int selected = -1;
+  unsigned long selectedAt = 0;
+
+  for (size_t i = 0; i < MAX_COMMAND_SLOTS; i++) {
+    if (!commandSlots[i].used) {
+      continue;
+    }
+    if (now < commandSlots[i].nextAtMs) {
+      continue;
+    }
+    if (selected < 0 || commandSlots[i].nextAtMs < selectedAt) {
+      selected = static_cast<int>(i);
+      selectedAt = commandSlots[i].nextAtMs;
+    }
+  }
+
+  if (selected < 0) {
+    return;
+  }
+
+  CommandSlot slot = commandSlots[selected];
+  bool sent = sendCommandToSlave(
+      slot.devId,
+      slot.comp,
+      slot.mod,
+      slot.stat,
+      slot.val,
+      slot.reqId);
+
+  if (sent) {
+    clearCommandSlot(selected);
+    return;
+  }
+
+  if (commandSlots[selected].attempts == 0) {
+    commandSlots[selected].attempts = 1;
+    commandSlots[selected].nextAtMs = now + COMMAND_RETRY_DELAY_MS;
+    logLine("Command retry scheduled " + slot.devId + " " + slot.comp);
+    return;
+  }
+
+  logLine("Command drop: transport " + slot.devId + " " + slot.comp);
+  clearCommandSlot(selected);
 }
 
 void startStatusFanout(const String& devId) {
@@ -630,8 +792,9 @@ void handleCommand(JsonObject data) {
   int mod = data["mod"] | 0;
   int stat = data["stat"] | 0;
   int val = data["val"] | 0;
+  String reqId = String(data["reqId"] | "");
   logLine("WebSocket cmd dev=" + devId + " comp=" + comp);
-  sendCommandToSlave(devId, comp, mod, stat, val);
+  enqueueCommandToSlave(devId, comp, mod, stat, val, reqId);
 }
 
 void handleStatus(JsonObject data) {
@@ -692,6 +855,11 @@ void handleUnbindSlave(JsonObject data) {
       slaves[i] = slaves[slaveCount - 1];
       slaveCount--;
       break;
+    }
+  }
+  for (size_t i = 0; i < MAX_COMMAND_SLOTS; i++) {
+    if (commandSlots[i].used && commandSlots[i].devId == clientId) {
+      clearCommandSlot(static_cast<int>(i));
     }
   }
   logLine("Unbound slave " + clientId);
@@ -768,5 +936,6 @@ void loop() {
   webSocket.loop();
   handleTcpClients();
   handleUdpDiscovery();
+  processCommandQueue();
   processStatusFanout();
 }

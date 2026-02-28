@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
@@ -34,6 +35,8 @@ from ..websocket.server import (
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+_status_refresh_cooldown_s = 1.0
+_last_status_refresh_at: dict[tuple[str, str, str], float] = {}
 
 
 def _default_server_pwd(server_id: str) -> str:
@@ -113,6 +116,7 @@ async def device_command(
         payload.mod,
         payload.stat,
         payload.val,
+        payload.req_id,
     )
     if not delivered:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
@@ -124,6 +128,7 @@ async def device_command(
             "mod": payload.mod,
             "stat": payload.stat,
             "val": payload.val,
+            "reqId": payload.req_id,
         }
     )
 
@@ -152,20 +157,33 @@ async def device_status(
     normalized_dev_id = _normalize_id(payload.dev_id)
 
     if payload.refresh:
-        if not is_gateway_connected(normalized_server_id):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
-            )
-
-        delivered = await emit_gateway_status(
-            normalized_server_id, normalized_dev_id, payload.comp
+        cooldown_key = (
+            normalized_server_id,
+            normalized_dev_id,
+            payload.comp if payload.comp else "*",
         )
-        if not delivered:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
-            )
+        now = time.monotonic()
+        last = _last_status_refresh_at.get(cooldown_key)
+        should_refresh_gateway = (
+            last is None or now - last >= _status_refresh_cooldown_s
+        )
 
-        await asyncio.sleep(0.15)
+        if should_refresh_gateway:
+            if not is_gateway_connected(normalized_server_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+                )
+
+            delivered = await emit_gateway_status(
+                normalized_server_id, normalized_dev_id, payload.comp
+            )
+            if not delivered:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+                )
+
+            _last_status_refresh_at[cooldown_key] = now
+            await asyncio.sleep(0.15)
 
     stmt = select(SwitchModule).where(SwitchModule.client_id == normalized_dev_id)
     if payload.comp:

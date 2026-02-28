@@ -124,7 +124,9 @@ class WebSocketManager:
         self._seen: dict[str, dict[str, tuple[str, float]]] = {}
         self._lock = asyncio.Lock()
         self._seen_ttl = 30.0
-        self._last_update: dict[tuple[str, str], tuple[int, int, int, float]] = {}
+        self._last_update: dict[
+            tuple[str, str], tuple[int, int, int, float, str | None]
+        ] = {}
 
     async def add_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -208,17 +210,26 @@ class WebSocketManager:
         return now - seen_at <= self._seen_ttl
 
     def should_accept_update(
-        self, client_id: str, comp: str, mod: int, stat: int, val: int
+        self,
+        client_id: str,
+        comp: str,
+        mod: int,
+        stat: int,
+        val: int,
+        req_id: str | None = None,
     ) -> bool:
         now = time.monotonic()
         key = (client_id, comp)
         last = self._last_update.get(key)
         if last:
-            last_mod, last_stat, last_val, last_ts = last
+            last_mod, last_stat, last_val, last_ts, last_req_id = last
             if last_mod == mod and last_stat == stat and last_val == val:
                 if now - last_ts < 0.5:
-                    return False
-        self._last_update[key] = (mod, stat, val, now)
+                    if req_id and req_id != last_req_id:
+                        pass
+                    else:
+                        return False
+        self._last_update[key] = (mod, stat, val, now, req_id)
         return True
 
     @staticmethod
@@ -236,6 +247,7 @@ async def emit_gateway_command(
     mod: int,
     stat: int,
     val: int,
+    req_id: str | None = None,
 ) -> bool:
     wire_server_id = _strip_prefix(server_id)
     wire_dev_id = _strip_prefix(dev_id)
@@ -249,6 +261,8 @@ async def emit_gateway_command(
         "stat": stat,
         "val": val,
     }
+    if req_id:
+        payload["reqId"] = req_id
     return await ws_manager.send_to_gateway(wire_server_id, "command", payload)
 
 
@@ -382,10 +396,12 @@ async def _handle_status_event(event: str, data: dict) -> None:
     mod = _safe_int(data.get("mod"))
     stat = _safe_int(data.get("stat"))
     val = _safe_int(data.get("val"))
+    req_id_raw = data.get("reqId")
+    req_id = req_id_raw if isinstance(req_id_raw, str) and req_id_raw else None
     if not isinstance(dev_id, str) or not isinstance(comp, str):
         return
 
-    if not ws_manager.should_accept_update(dev_id, comp, mod, stat, val):
+    if not ws_manager.should_accept_update(dev_id, comp, mod, stat, val, req_id):
         return
 
     async with AsyncSessionLocal() as session:
@@ -398,10 +414,17 @@ async def _handle_status_event(event: str, data: dict) -> None:
     if not isinstance(ts, (int, float)):
         ts = int(time.time() * 1000)
 
-    await ws_manager.broadcast(
-        event,
-        {"devID": dev_id, "comp": comp, "mod": mod, "stat": stat, "val": val, "ts": ts},
-    )
+    payload = {
+        "devID": dev_id,
+        "comp": comp,
+        "mod": mod,
+        "stat": stat,
+        "val": val,
+        "ts": ts,
+    }
+    if req_id:
+        payload["reqId"] = req_id
+    await ws_manager.broadcast(event, payload)
 
 
 async def _handle_command(data: dict) -> None:
@@ -411,7 +434,9 @@ async def _handle_command(data: dict) -> None:
     mod = _safe_int(data.get("mod"))
     stat = _safe_int(data.get("stat"))
     val = _safe_int(data.get("val"))
-    await emit_gateway_command(server_id, dev_id, comp, mod, stat, val)
+    req_id_raw = data.get("reqId")
+    req_id = req_id_raw if isinstance(req_id_raw, str) and req_id_raw else None
+    await emit_gateway_command(server_id, dev_id, comp, mod, stat, val, req_id)
 
 
 async def _handle_status_request(data: dict) -> None:

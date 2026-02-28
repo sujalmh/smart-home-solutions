@@ -24,6 +24,7 @@ WiFiUDP udp;
 int relayState[4] = {0, 0, 0, 0};
 int relayMode[4] = {0, 0, 0, 0};
 int relayValue[4] = {0, 0, 0, 0};
+String pendingReqId[4] = {"", "", "", ""};
 unsigned long lastRegistrationMs = 0;
 const unsigned long REGISTRATION_INTERVAL_MS = 15000;
 unsigned long lastDiscoveryMs = 0;
@@ -151,8 +152,15 @@ bool sendStatus(int index) {
   String comp = "Comp" + String(index);
   String payload = String(SLAVE_ID) + ";" + comp + ";" + String(relayMode[index]) + ";" +
                    String(relayState[index]) + ";" + String(relayValue[index]);
+  if (pendingReqId[index].length() > 0) {
+    payload += ";" + pendingReqId[index];
+  }
   String line = "sta=" + payload;
-  return sendLinesToMaster(&line, 1);
+  bool sent = sendLinesToMaster(&line, 1);
+  if (sent && pendingReqId[index].length() > 0) {
+    pendingReqId[index] = "";
+  }
+  return sent;
 }
 
 void enqueueStatus(int index) {
@@ -196,10 +204,10 @@ void handleCommand() {
     cmd += ";";
   }
 
-  String parts[5];
+  String parts[6];
   int count = 0;
   int start = 0;
-  for (int i = 0; i < cmd.length() && count < 5; i++) {
+  for (int i = 0; i < cmd.length() && count < 6; i++) {
     if (cmd[i] == ';') {
       parts[count++] = cmd.substring(start, i);
       start = i + 1;
@@ -215,6 +223,7 @@ void handleCommand() {
   String mode = parts[2];
   String statStr = parts[3];
   String valStr = count >= 5 ? parts[4] : "";
+  String reqId = count >= 6 ? parts[5] : "";
 
   if (slave != String(SLAVE_ID)) {
     server.send(404, "text/plain", "not_for_me");
@@ -241,6 +250,7 @@ void handleCommand() {
 
   relayMode[index] = modeInt;
   relayValue[index] = value;
+  pendingReqId[index] = reqId;
   applyRelayState(index, stat);
   server.send(200, "text/plain", "ok");
   enqueueStatus(index);

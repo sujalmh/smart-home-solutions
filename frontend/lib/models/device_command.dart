@@ -5,6 +5,7 @@ class DeviceCommand {
   final int mod;
   final int stat;
   final int val;
+  final String? reqId;
 
   const DeviceCommand({
     required this.serverId,
@@ -13,6 +14,7 @@ class DeviceCommand {
     required this.mod,
     required this.stat,
     required this.val,
+    this.reqId,
   });
 
   Map<String, dynamic> toJson() {
@@ -23,6 +25,7 @@ class DeviceCommand {
       'mod': mod,
       'stat': stat,
       'val': val,
+      if (reqId != null) 'reqId': reqId,
     };
   }
 }

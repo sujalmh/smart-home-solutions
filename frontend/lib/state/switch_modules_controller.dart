@@ -14,16 +14,16 @@ class CommandRateLimitException implements Exception {
 }
 
 class _PendingTarget {
+  final String reqId;
   final int mode;
   final int status;
   final int value;
-  final DateTime since;
 
   const _PendingTarget({
+    required this.reqId,
     required this.mode,
     required this.status,
     required this.value,
-    required this.since,
   });
 
   bool matches(int incomingMode, int incomingStatus, int incomingValue) {
@@ -31,8 +31,6 @@ class _PendingTarget {
         status == incomingStatus &&
         value == incomingValue;
   }
-
-  int get ageMs => DateTime.now().difference(since).inMilliseconds;
 }
 
 class SwitchModulesController
@@ -50,6 +48,7 @@ class SwitchModulesController
   final Map<String, DateTime> _lastCommandAt = {};
   final Set<String> _staleComps = <String>{};
   final Map<String, int> _lastTs = {};
+  int _requestSequence = 0;
 
   SwitchModulesController({
     required this.clientId,
@@ -101,13 +100,14 @@ class SwitchModulesController
     required int status,
     required int value,
   }) async {
+    final reqId = _nextReqId();
     final waitMs = _remainingRateLimitMs(compId);
     if (waitMs > 0) {
       throw CommandRateLimitException(waitMs);
     }
     _markRateLimited(compId);
 
-    _markPending(compId, mode, status, value);
+    _markPending(compId, reqId, mode, status, value);
     _clearStale(compId);
     _applyOptimistic(compId, mode, status, value);
     try {
@@ -119,9 +119,10 @@ class SwitchModulesController
           mod: mode,
           stat: status,
           val: value,
+          reqId: reqId,
         ),
       );
-      _scheduleConfirmationFallback(serverId, compId);
+      _scheduleConfirmationTimeout(compId);
     } catch (_) {
       _clearPending(compId);
       _markStale(compId);
@@ -144,6 +145,8 @@ class SwitchModulesController
     final mode = (data['mod'] as num?)?.toInt() ?? 0;
     final status = (data['stat'] as num?)?.toInt() ?? 0;
     final value = (data['val'] as num?)?.toInt() ?? 0;
+    final wireReqId = data['reqId']?.toString();
+    final reqId = wireReqId != null && wireReqId.isNotEmpty ? wireReqId : null;
     final ts = (data['ts'] as num?)?.toInt();
     if (ts != null) {
       final lastTs = _lastTs[compId];
@@ -164,8 +167,11 @@ class SwitchModulesController
 
     final pending = _pendingTargets[compId];
     if (pending != null) {
-      if (!pending.matches(mode, status, value) &&
-          pending.ageMs < _confirmWindowMs) {
+      if (reqId != null) {
+        if (reqId != pending.reqId) {
+          return;
+        }
+      } else if (!pending.matches(mode, status, value)) {
         return;
       }
       _clearPending(compId, notify: false);
@@ -221,12 +227,18 @@ class SwitchModulesController
 
   int rateLimitRemainingMs(String compId) => _remainingRateLimitMs(compId);
 
-  void _markPending(String compId, int mode, int status, int value) {
+  void _markPending(
+    String compId,
+    String reqId,
+    int mode,
+    int status,
+    int value,
+  ) {
     _pendingTargets[compId] = _PendingTarget(
+      reqId: reqId,
       mode: mode,
       status: status,
       value: value,
-      since: DateTime.now(),
     );
     _notifyStateUnchanged();
   }
@@ -252,34 +264,23 @@ class SwitchModulesController
     return remaining > 0 ? remaining : 0;
   }
 
-  void _scheduleConfirmationFallback(String serverId, String compId) {
+  void _scheduleConfirmationTimeout(String compId) {
     _pendingTimers[compId]?.cancel();
     _pendingTimers[compId] = Timer(
       const Duration(milliseconds: _confirmWindowMs),
       () {
-        unawaited(_runFallbackRefresh(serverId, compId));
+        if (!isPending(compId)) {
+          return;
+        }
+        _clearPending(compId);
+        _markStale(compId);
       },
     );
   }
 
-  Future<void> _runFallbackRefresh(String serverId, String compId) async {
-    if (!isPending(compId)) {
-      return;
-    }
-
-    await refreshFromDevice(
-      serverId,
-      compId: compId,
-      refresh: true,
-      silent: true,
-    );
-
-    if (!isPending(compId)) {
-      return;
-    }
-
-    _clearPending(compId);
-    _markStale(compId);
+  String _nextReqId() {
+    _requestSequence = (_requestSequence + 1) % 1000000;
+    return '${DateTime.now().millisecondsSinceEpoch}-$clientId-$_requestSequence';
   }
 
   void _notifyStateUnchanged() {
