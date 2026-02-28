@@ -40,13 +40,17 @@ class DeviceRepository {
     required String serverId,
     required String devId,
     String? comp,
+    bool refresh = false,
   }) async {
     final normalizedServer = _normalizeId(serverId);
     final normalizedDev = _normalizeId(devId);
-    final response = await api.postList(
-      '/api/devices/$normalizedServer/status',
-      {'serverID': normalizedServer, 'devID': normalizedDev, 'comp': ?comp},
-    );
+    final response = await api
+        .postList('/api/devices/$normalizedServer/status', {
+          'serverID': normalizedServer,
+          'devID': normalizedDev,
+          'refresh': refresh,
+          'comp': ?comp,
+        });
     return response
         .map((item) => SwitchModule.fromJson(item as Map<String, dynamic>))
         .toList();

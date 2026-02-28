@@ -74,7 +74,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
               try {
                 await ref
                     .read(switchModulesProvider(widget.clientId).notifier)
-                    .refreshFromDevice(widget.serverId);
+                    .refreshFromDevice(widget.serverId, refresh: true);
               } catch (_) {
                 if (!context.mounted) {
                   return;
@@ -109,6 +109,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
                 return _SwitchCard(
                   module: module,
                   pending: controller.isPending(module.compId),
+                  stale: controller.isStale(module.compId),
                   onModeChanged: (mode) => _sendUpdate(module, mode: mode),
                   onStatusChanged: (status) =>
                       _sendUpdate(module, status: status),
@@ -155,6 +156,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
 class _SwitchCard extends StatefulWidget {
   final SwitchModule module;
   final bool pending;
+  final bool stale;
   final ValueChanged<int> onModeChanged;
   final ValueChanged<int> onStatusChanged;
   final ValueChanged<int> onValueCommitted;
@@ -162,6 +164,7 @@ class _SwitchCard extends StatefulWidget {
   const _SwitchCard({
     required this.module,
     required this.pending,
+    required this.stale,
     required this.onModeChanged,
     required this.onStatusChanged,
     required this.onValueCommitted,
@@ -193,6 +196,7 @@ class _SwitchCardState extends State<_SwitchCard> {
   Widget build(BuildContext context) {
     final module = widget.module;
     final pending = widget.pending;
+    final stale = widget.stale;
     final isAuto = module.mode == 1;
     final isOn = module.status == 1;
     final accent = isOn ? const Color(0xFF0F7B7A) : const Color(0xFF8E9A9A);
@@ -223,6 +227,21 @@ class _SwitchCardState extends State<_SwitchCard> {
                   height: 18,
                   width: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (stale)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF2C26A).withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Sync delayed',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
             ],
           ),

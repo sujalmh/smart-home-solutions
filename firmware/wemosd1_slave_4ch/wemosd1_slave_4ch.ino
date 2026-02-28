@@ -30,6 +30,10 @@ unsigned long lastDiscoveryMs = 0;
 IPAddress masterIp;
 unsigned long lastResolveMs = 0;
 const unsigned long RESOLVE_INTERVAL_MS = 10000;
+const unsigned long STATUS_SEND_INTERVAL_MS = 35;
+bool pendingStatus[4] = {false, false, false, false};
+unsigned long lastStatusSendMs = 0;
+uint8_t statusCursor = 0;
 
 int compToIndex(const String& comp) {
   if (comp == "Comp0") return 0;
@@ -143,12 +147,40 @@ void sendRegistration() {
   }
 }
 
-void sendStatus(int index) {
+bool sendStatus(int index) {
   String comp = "Comp" + String(index);
   String payload = String(SLAVE_ID) + ";" + comp + ";" + String(relayMode[index]) + ";" +
                    String(relayState[index]) + ";" + String(relayValue[index]);
   String line = "sta=" + payload;
-  sendLinesToMaster(&line, 1);
+  return sendLinesToMaster(&line, 1);
+}
+
+void enqueueStatus(int index) {
+  if (index < 0 || index >= 4) {
+    return;
+  }
+  pendingStatus[index] = true;
+}
+
+void processPendingStatus() {
+  unsigned long now = millis();
+  if (now - lastStatusSendMs < STATUS_SEND_INTERVAL_MS) {
+    return;
+  }
+
+  for (int step = 0; step < 4; step++) {
+    int index = (statusCursor + step) % 4;
+    if (!pendingStatus[index]) {
+      continue;
+    }
+
+    if (sendStatus(index)) {
+      pendingStatus[index] = false;
+    }
+    statusCursor = static_cast<uint8_t>((index + 1) % 4);
+    lastStatusSendMs = now;
+    return;
+  }
 }
 
 void handleCommand() {
@@ -211,7 +243,7 @@ void handleCommand() {
   relayValue[index] = value;
   applyRelayState(index, stat);
   server.send(200, "text/plain", "ok");
-  sendStatus(index);
+  enqueueStatus(index);
 }
 
 void handleStatusRequest() {
@@ -255,7 +287,7 @@ void handleStatusRequest() {
   }
 
   server.send(200, "text/plain", "ok");
-  sendStatus(index);
+  enqueueStatus(index);
 }
 
 void ensureRegistration() {
@@ -319,6 +351,7 @@ void setup() {
 void loop() {
   server.handleClient();
   handleUdpAnnouncements();
+  processPendingStatus();
   ensureRegistration();
   ensureDiscovery();
 }

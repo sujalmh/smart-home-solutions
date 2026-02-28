@@ -60,7 +60,11 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
   Future<void> _requestStatus(String clientId) async {
     await ref
         .read(deviceRepositoryProvider)
-        .requestStatus(serverId: widget.serverId, devId: clientId);
+        .requestStatus(
+          serverId: widget.serverId,
+          devId: clientId,
+          refresh: true,
+        );
   }
 
   @override

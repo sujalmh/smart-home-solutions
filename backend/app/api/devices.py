@@ -151,14 +151,21 @@ async def device_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
 
-    if not is_gateway_connected(normalized_server_id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+    if payload.refresh:
+        if not is_gateway_connected(normalized_server_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+            )
 
-    delivered = await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
-    if not delivered:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+        delivered = await emit_gateway_status(
+            normalized_server_id, normalized_dev_id, payload.comp
+        )
+        if not delivered:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+            )
 
-    await asyncio.sleep(0.25)
+        await asyncio.sleep(0.15)
 
     stmt = select(SwitchModule).where(SwitchModule.client_id == normalized_dev_id)
     if payload.comp:

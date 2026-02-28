@@ -22,6 +22,7 @@ class DeviceStatusRequest(BaseModel):
     server_id: str = Field(alias="serverID")
     dev_id: str = Field(alias="devID")
     comp: str | None = None
+    refresh: bool = False
 
 
 class DeviceServerConfigRequest(BaseModel):

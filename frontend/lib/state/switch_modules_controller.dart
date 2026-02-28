@@ -31,13 +31,15 @@ class _PendingTarget {
 
 class SwitchModulesController
     extends StateNotifier<AsyncValue<List<SwitchModule>>> {
+  static const int _confirmWindowMs = 1300;
+
   final String clientId;
   final ClientRepository clientRepository;
   final DeviceRepository deviceRepository;
 
   final Map<String, _PendingTarget> _pendingTargets = {};
   final Map<String, Timer> _pendingTimers = {};
-  final Map<String, int> _pendingAttempts = {};
+  final Set<String> _staleComps = <String>{};
   final Map<String, int> _lastTs = {};
 
   SwitchModulesController({
@@ -65,6 +67,7 @@ class SwitchModulesController
   Future<void> refreshFromDevice(
     String serverId, {
     String? compId,
+    bool refresh = false,
     bool silent = false,
   }) async {
     try {
@@ -72,6 +75,7 @@ class SwitchModulesController
         serverId: serverId,
         devId: clientId,
         comp: compId,
+        refresh: refresh,
       );
       applyServerSnapshot(snapshot);
     } catch (_) {
@@ -89,6 +93,7 @@ class SwitchModulesController
     required int value,
   }) async {
     _markPending(compId, mode, status, value);
+    _clearStale(compId);
     _applyOptimistic(compId, mode, status, value);
     try {
       await deviceRepository.sendCommand(
@@ -101,10 +106,10 @@ class SwitchModulesController
           val: value,
         ),
       );
-      _schedulePendingReconcile(serverId, compId);
+      _scheduleConfirmationFallback(serverId, compId);
     } catch (_) {
       _clearPending(compId);
-      unawaited(refreshFromDevice(serverId, compId: compId, silent: true));
+      _markStale(compId);
       rethrow;
     }
   }
@@ -144,13 +149,14 @@ class SwitchModulesController
 
     final pending = _pendingTargets[compId];
     if (pending != null) {
-      final confirmed = pending.matches(mode, status, value);
-      if (!confirmed && pending.ageMs < 1500) {
+      if (!pending.matches(mode, status, value) &&
+          pending.ageMs < _confirmWindowMs) {
         return;
       }
-      _clearPending(compId);
+      _clearPending(compId, notify: false);
     }
 
+    _clearStale(compId, notify: false);
     _upsertModule(
       SwitchModule(
         clientId: clientId,
@@ -166,23 +172,35 @@ class SwitchModulesController
     if (modules.isEmpty) {
       return;
     }
+
+    bool changedMeta = false;
     for (final module in modules) {
       final pending = _pendingTargets[module.compId];
       if (pending != null) {
-        final confirmed = pending.matches(
-          module.mode,
-          module.status,
-          module.value,
-        );
-        if (confirmed || pending.ageMs >= 4500) {
-          _clearPending(module.compId);
+        if (pending.matches(module.mode, module.status, module.value)) {
+          _clearPending(module.compId, notify: false);
+          if (_staleComps.remove(module.compId)) {
+            changedMeta = true;
+          }
+          _upsertModule(module);
         }
+        continue;
+      }
+
+      if (_staleComps.remove(module.compId)) {
+        changedMeta = true;
       }
       _upsertModule(module);
+    }
+
+    if (changedMeta) {
+      _notifyStateUnchanged();
     }
   }
 
   bool isPending(String compId) => _pendingTargets.containsKey(compId);
+
+  bool isStale(String compId) => _staleComps.contains(compId);
 
   void _markPending(String compId, int mode, int status, int value) {
     _pendingTargets[compId] = _PendingTarget(
@@ -191,52 +209,40 @@ class SwitchModulesController
       value: value,
       since: DateTime.now(),
     );
-    _notifyPending();
+    _notifyStateUnchanged();
   }
 
-  void _schedulePendingReconcile(String serverId, String compId) {
+  void _scheduleConfirmationFallback(String serverId, String compId) {
     _pendingTimers[compId]?.cancel();
-    _pendingAttempts[compId] = 0;
-    _schedulePendingTick(serverId, compId, const Duration(milliseconds: 700));
+    _pendingTimers[compId] = Timer(
+      const Duration(milliseconds: _confirmWindowMs),
+      () {
+        unawaited(_runFallbackRefresh(serverId, compId));
+      },
+    );
   }
 
-  void _schedulePendingTick(String serverId, String compId, Duration delay) {
-    _pendingTimers[compId]?.cancel();
-    _pendingTimers[compId] = Timer(delay, () {
-      unawaited(_runPendingTick(serverId, compId));
-    });
-  }
-
-  Future<void> _runPendingTick(String serverId, String compId) async {
+  Future<void> _runFallbackRefresh(String serverId, String compId) async {
     if (!isPending(compId)) {
       return;
     }
 
-    await refreshFromDevice(serverId, compId: compId, silent: true);
+    await refreshFromDevice(
+      serverId,
+      compId: compId,
+      refresh: true,
+      silent: true,
+    );
+
     if (!isPending(compId)) {
       return;
     }
 
-    final attempts = (_pendingAttempts[compId] ?? 0) + 1;
-    _pendingAttempts[compId] = attempts;
-    if (attempts >= 3) {
-      _clearPending(compId);
-      await load(showLoading: false);
-      return;
-    }
-
-    if (attempts == 1) {
-      _schedulePendingTick(
-        serverId,
-        compId,
-        const Duration(milliseconds: 1200),
-      );
-      return;
-    }
-    _schedulePendingTick(serverId, compId, const Duration(milliseconds: 2200));
+    _clearPending(compId);
+    _markStale(compId);
   }
 
-  void _notifyPending() {
+  void _notifyStateUnchanged() {
     final modules = state.value;
     if (modules == null) {
       return;
@@ -284,11 +290,24 @@ class SwitchModulesController
     return null;
   }
 
-  void _clearPending(String compId) {
+  void _clearPending(String compId, {bool notify = true}) {
     _pendingTargets.remove(compId);
-    _pendingAttempts.remove(compId);
     _pendingTimers.remove(compId)?.cancel();
-    _notifyPending();
+    if (notify) {
+      _notifyStateUnchanged();
+    }
+  }
+
+  void _markStale(String compId, {bool notify = true}) {
+    if (_staleComps.add(compId) && notify) {
+      _notifyStateUnchanged();
+    }
+  }
+
+  void _clearStale(String compId, {bool notify = true}) {
+    if (_staleComps.remove(compId) && notify) {
+      _notifyStateUnchanged();
+    }
   }
 
   String _normalizeId(String devId) {
