@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/socket_client.dart';
 import '../../models/switch_module.dart';
 import '../../state/providers.dart';
+import '../../state/switch_modules_controller.dart';
 
 class SwitchScreen extends ConsumerStatefulWidget {
   final String serverId;
@@ -110,6 +111,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
                   module: module,
                   pending: controller.isPending(module.compId),
                   stale: controller.isStale(module.compId),
+                  rateLimited: controller.isRateLimited(module.compId),
                   onModeChanged: (mode) => _sendUpdate(module, mode: mode),
                   onStatusChanged: (status) =>
                       _sendUpdate(module, status: status),
@@ -142,6 +144,16 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
             status: status ?? module.status,
             value: value ?? module.value,
           );
+    } on CommandRateLimitException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final waitSeconds = (error.waitMs / 1000).ceil();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please wait $waitSeconds s before next input.'),
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -157,6 +169,7 @@ class _SwitchCard extends StatefulWidget {
   final SwitchModule module;
   final bool pending;
   final bool stale;
+  final bool rateLimited;
   final ValueChanged<int> onModeChanged;
   final ValueChanged<int> onStatusChanged;
   final ValueChanged<int> onValueCommitted;
@@ -165,6 +178,7 @@ class _SwitchCard extends StatefulWidget {
     required this.module,
     required this.pending,
     required this.stale,
+    required this.rateLimited,
     required this.onModeChanged,
     required this.onStatusChanged,
     required this.onValueCommitted,
@@ -197,6 +211,8 @@ class _SwitchCardState extends State<_SwitchCard> {
     final module = widget.module;
     final pending = widget.pending;
     final stale = widget.stale;
+    final rateLimited = widget.rateLimited;
+    final blocked = pending || rateLimited;
     final isAuto = module.mode == 1;
     final isOn = module.status == 1;
     final accent = isOn ? const Color(0xFF0F7B7A) : const Color(0xFF8E9A9A);
@@ -228,6 +244,21 @@ class _SwitchCardState extends State<_SwitchCard> {
                   width: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
+              else if (rateLimited)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9AB0D7).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Input limit',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                )
               else if (stale)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -255,7 +286,7 @@ class _SwitchCardState extends State<_SwitchCard> {
                     ButtonSegment(value: 1, label: Text('Auto')),
                   ],
                   selected: {isAuto ? 1 : 0},
-                  onSelectionChanged: pending
+                  onSelectionChanged: blocked
                       ? null
                       : (values) {
                           widget.onModeChanged(values.first);
@@ -268,7 +299,7 @@ class _SwitchCardState extends State<_SwitchCard> {
                   const Text('Power', style: TextStyle(fontSize: 12)),
                   Switch(
                     value: isOn,
-                    onChanged: pending
+                    onChanged: blocked
                         ? null
                         : (value) => widget.onStatusChanged(value ? 1 : 0),
                   ),
@@ -285,7 +316,7 @@ class _SwitchCardState extends State<_SwitchCard> {
             min: 0,
             max: 1000,
             value: _dragValue,
-            onChanged: pending
+            onChanged: blocked
                 ? null
                 : (value) {
                     setState(() {
@@ -293,7 +324,7 @@ class _SwitchCardState extends State<_SwitchCard> {
                       _dragValue = value;
                     });
                   },
-            onChangeEnd: pending
+            onChangeEnd: blocked
                 ? null
                 : (value) {
                     setState(() {

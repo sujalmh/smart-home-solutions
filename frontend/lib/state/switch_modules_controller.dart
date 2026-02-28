@@ -7,6 +7,12 @@ import '../data/repositories/device_repository.dart';
 import '../models/device_command.dart';
 import '../models/switch_module.dart';
 
+class CommandRateLimitException implements Exception {
+  final int waitMs;
+
+  const CommandRateLimitException(this.waitMs);
+}
+
 class _PendingTarget {
   final int mode;
   final int status;
@@ -32,6 +38,7 @@ class _PendingTarget {
 class SwitchModulesController
     extends StateNotifier<AsyncValue<List<SwitchModule>>> {
   static const int _confirmWindowMs = 1300;
+  static const int _commandRateLimitMs = 1200;
 
   final String clientId;
   final ClientRepository clientRepository;
@@ -39,6 +46,8 @@ class SwitchModulesController
 
   final Map<String, _PendingTarget> _pendingTargets = {};
   final Map<String, Timer> _pendingTimers = {};
+  final Map<String, Timer> _rateLimitTimers = {};
+  final Map<String, DateTime> _lastCommandAt = {};
   final Set<String> _staleComps = <String>{};
   final Map<String, int> _lastTs = {};
 
@@ -92,6 +101,12 @@ class SwitchModulesController
     required int status,
     required int value,
   }) async {
+    final waitMs = _remainingRateLimitMs(compId);
+    if (waitMs > 0) {
+      throw CommandRateLimitException(waitMs);
+    }
+    _markRateLimited(compId);
+
     _markPending(compId, mode, status, value);
     _clearStale(compId);
     _applyOptimistic(compId, mode, status, value);
@@ -202,6 +217,10 @@ class SwitchModulesController
 
   bool isStale(String compId) => _staleComps.contains(compId);
 
+  bool isRateLimited(String compId) => _remainingRateLimitMs(compId) > 0;
+
+  int rateLimitRemainingMs(String compId) => _remainingRateLimitMs(compId);
+
   void _markPending(String compId, int mode, int status, int value) {
     _pendingTargets[compId] = _PendingTarget(
       mode: mode,
@@ -210,6 +229,27 @@ class SwitchModulesController
       since: DateTime.now(),
     );
     _notifyStateUnchanged();
+  }
+
+  void _markRateLimited(String compId) {
+    final now = DateTime.now();
+    _lastCommandAt[compId] = now;
+    _rateLimitTimers[compId]?.cancel();
+    _rateLimitTimers[compId] = Timer(
+      const Duration(milliseconds: _commandRateLimitMs),
+      _notifyStateUnchanged,
+    );
+    _notifyStateUnchanged();
+  }
+
+  int _remainingRateLimitMs(String compId) {
+    final last = _lastCommandAt[compId];
+    if (last == null) {
+      return 0;
+    }
+    final elapsed = DateTime.now().difference(last).inMilliseconds;
+    final remaining = _commandRateLimitMs - elapsed;
+    return remaining > 0 ? remaining : 0;
   }
 
   void _scheduleConfirmationFallback(String serverId, String compId) {
@@ -323,6 +363,10 @@ class SwitchModulesController
       timer.cancel();
     }
     _pendingTimers.clear();
+    for (final timer in _rateLimitTimers.values) {
+      timer.cancel();
+    }
+    _rateLimitTimers.clear();
     super.dispose();
   }
 }
