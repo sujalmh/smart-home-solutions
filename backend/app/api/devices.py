@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,7 +106,7 @@ async def device_command(
     if not is_gateway_connected(normalized_server_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
 
-    await emit_gateway_command(
+    delivered = await emit_gateway_command(
         normalized_server_id,
         normalized_dev_id,
         payload.comp,
@@ -112,6 +114,8 @@ async def device_command(
         payload.stat,
         payload.val,
     )
+    if not delivered:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
     return DeviceCommandResponse.model_validate(
         {
             "serverID": normalized_server_id,
@@ -147,7 +151,14 @@ async def device_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
     normalized_dev_id = _normalize_id(payload.dev_id)
 
-    await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
+    if not is_gateway_connected(normalized_server_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+
+    delivered = await emit_gateway_status(normalized_server_id, normalized_dev_id, payload.comp)
+    if not delivered:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+
+    await asyncio.sleep(0.25)
 
     stmt = select(SwitchModule).where(SwitchModule.client_id == normalized_dev_id)
     if payload.comp:

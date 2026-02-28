@@ -54,6 +54,10 @@ final socketResponseProvider = StreamProvider<Map<String, dynamic>>((ref) {
   return ref.watch(socketClientProvider).responses;
 });
 
+final socketConnectionProvider = StreamProvider<SocketConnectionState>((ref) {
+  return ref.watch(socketClientProvider).connectionState;
+});
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(api: ref.watch(publicApiClientProvider));
 });

@@ -22,6 +22,8 @@ ESP8266WebServer server(80);
 WiFiUDP udp;
 
 int relayState[4] = {0, 0, 0, 0};
+int relayMode[4] = {0, 0, 0, 0};
+int relayValue[4] = {0, 0, 0, 0};
 unsigned long lastRegistrationMs = 0;
 const unsigned long REGISTRATION_INTERVAL_MS = 15000;
 unsigned long lastDiscoveryMs = 0;
@@ -54,8 +56,47 @@ bool resolveMasterIp() {
     Serial.println("Resolved master IP: " + masterIp.toString());
     return true;
   }
+  if (masterIp != IPAddress(0, 0, 0, 0)) {
+    Serial.println("Host resolve failed; using discovered master IP: " + masterIp.toString());
+    return true;
+  }
   Serial.println("Failed to resolve master host.");
   return false;
+}
+
+void handleUdpAnnouncements() {
+  int packetSize = udp.parsePacket();
+  if (packetSize <= 0) {
+    return;
+  }
+
+  char buffer[128];
+  int len = udp.read(buffer, sizeof(buffer) - 1);
+  if (len <= 0) {
+    return;
+  }
+  buffer[len] = '\0';
+
+  String line = String(buffer);
+  line.trim();
+  if (!line.startsWith("mrg=")) {
+    return;
+  }
+
+  String payload = line.substring(4);
+  int sep = payload.indexOf(';');
+  if (sep < 0) {
+    return;
+  }
+  String ipStr = payload.substring(sep + 1);
+  IPAddress announcedIp;
+  if (!announcedIp.fromString(ipStr)) {
+    return;
+  }
+  if (masterIp != announcedIp) {
+    masterIp = announcedIp;
+    Serial.println("Discovered master IP via UDP: " + masterIp.toString());
+  }
 }
 
 bool sendLinesToMaster(const String* lines, size_t count) {
@@ -93,7 +134,8 @@ void sendRegistration() {
   lines[0] = "drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString();
   for (int i = 0; i < 4; i++) {
     String comp = "Comp" + String(i);
-    String payload = String(SLAVE_ID) + ";" + comp + ";M;" + String(relayState[i]) + ";0";
+    String payload = String(SLAVE_ID) + ";" + comp + ";" + String(relayMode[i]) + ";" +
+                     String(relayState[i]) + ";" + String(relayValue[i]);
     lines[i + 1] = "dst=" + payload;
   }
   if (sendLinesToMaster(lines, 5)) {
@@ -103,7 +145,8 @@ void sendRegistration() {
 
 void sendStatus(int index) {
   String comp = "Comp" + String(index);
-  String payload = String(SLAVE_ID) + ";" + comp + ";M;" + String(relayState[index]) + ";0";
+  String payload = String(SLAVE_ID) + ";" + comp + ";" + String(relayMode[index]) + ";" +
+                   String(relayState[index]) + ";" + String(relayValue[index]);
   String line = "sta=" + payload;
   sendLinesToMaster(&line, 1);
 }
@@ -139,6 +182,7 @@ void handleCommand() {
   String comp = parts[1];
   String mode = parts[2];
   String statStr = parts[3];
+  String valStr = count >= 5 ? parts[4] : "";
 
   if (slave != String(SLAVE_ID)) {
     server.send(404, "text/plain", "not_for_me");
@@ -152,6 +196,19 @@ void handleCommand() {
   }
 
   int stat = statStr.toInt();
+  int modeInt = mode.toInt();
+  int value = valStr.toInt();
+  stat = stat > 0 ? 1 : 0;
+  modeInt = modeInt > 0 ? 1 : 0;
+  if (value < 0) {
+    value = 0;
+  }
+  if (value > 1000) {
+    value = 1000;
+  }
+
+  relayMode[index] = modeInt;
+  relayValue[index] = value;
   applyRelayState(index, stat);
   server.send(200, "text/plain", "ok");
   sendStatus(index);
@@ -167,26 +224,31 @@ void handleStatusRequest() {
   Serial.println("HTTP usrini: " + cmd);
   cmd.trim();
 
-  String parts[2];
-  int count = 0;
-  int start = 0;
-  for (int i = 0; i < cmd.length() && count < 2; i++) {
-    if (cmd[i] == ';') {
-      parts[count++] = cmd.substring(start, i);
-      start = i + 1;
-    }
-  }
-  if (count < 2) {
+  int sep = cmd.indexOf(';');
+  if (sep < 0) {
     server.send(400, "text/plain", "invalid");
     return;
   }
 
-  if (parts[0] != String(SLAVE_ID)) {
+  String slaveId = cmd.substring(0, sep);
+  String comp = cmd.substring(sep + 1);
+  int trailing = comp.indexOf(';');
+  if (trailing >= 0) {
+    comp = comp.substring(0, trailing);
+  }
+  slaveId.trim();
+  comp.trim();
+  if (slaveId.length() == 0 || comp.length() == 0) {
+    server.send(400, "text/plain", "invalid");
+    return;
+  }
+
+  if (slaveId != String(SLAVE_ID)) {
     server.send(404, "text/plain", "not_for_me");
     return;
   }
 
-  int index = compToIndex(parts[1]);
+  int index = compToIndex(comp);
   if (index < 0) {
     server.send(400, "text/plain", "invalid_comp");
     return;
@@ -256,6 +318,7 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  handleUdpAnnouncements();
   ensureRegistration();
   ensureDiscovery();
 }

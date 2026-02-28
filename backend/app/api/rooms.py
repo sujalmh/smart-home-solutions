@@ -82,5 +82,10 @@ async def command_room_device(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="device_not_found",
             ) from error
+        if str(error) == "gateway_offline":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="gateway_offline",
+            ) from error
         raise
     return RoomDeviceCommandResponse.model_validate(command)

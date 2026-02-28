@@ -236,11 +236,11 @@ async def emit_gateway_command(
     mod: int,
     stat: int,
     val: int,
-) -> None:
+) -> bool:
     wire_server_id = _strip_prefix(server_id)
     wire_dev_id = _strip_prefix(dev_id)
     if not wire_server_id or not wire_dev_id or not comp:
-        return
+        return False
     payload = {
         "serverID": wire_server_id,
         "devID": wire_dev_id,
@@ -249,42 +249,42 @@ async def emit_gateway_command(
         "stat": stat,
         "val": val,
     }
-    await ws_manager.send_to_gateway(wire_server_id, "command", payload)
+    return await ws_manager.send_to_gateway(wire_server_id, "command", payload)
 
 
 async def emit_gateway_status(
     server_id: str | None,
     dev_id: str | None,
     comp: str | None,
-) -> None:
+) -> bool:
     wire_server_id = _strip_prefix(server_id)
     wire_dev_id = _strip_prefix(dev_id)
     if not wire_server_id or not wire_dev_id:
-        return
+        return False
     payload = {
         "serverID": wire_server_id,
         "devID": wire_dev_id,
         "comp": comp,
     }
-    await ws_manager.send_to_gateway(wire_server_id, "status", payload)
+    return await ws_manager.send_to_gateway(wire_server_id, "status", payload)
 
 
-async def emit_gateway_bind(server_id: str | None, client_id: str | None) -> None:
+async def emit_gateway_bind(server_id: str | None, client_id: str | None) -> bool:
     wire_server_id = _strip_prefix(server_id)
     wire_client_id = _strip_prefix(client_id)
     if not wire_server_id or not wire_client_id:
-        return
+        return False
     payload = {"serverID": wire_server_id, "clientID": wire_client_id}
-    await ws_manager.send_to_gateway(wire_server_id, "bind_slave", payload)
+    return await ws_manager.send_to_gateway(wire_server_id, "bind_slave", payload)
 
 
-async def emit_gateway_unbind(server_id: str | None, client_id: str | None) -> None:
+async def emit_gateway_unbind(server_id: str | None, client_id: str | None) -> bool:
     wire_server_id = _strip_prefix(server_id)
     wire_client_id = _strip_prefix(client_id)
     if not wire_server_id or not wire_client_id:
-        return
+        return False
     payload = {"serverID": wire_server_id, "clientID": wire_client_id}
-    await ws_manager.send_to_gateway(wire_server_id, "unbind_slave", payload)
+    return await ws_manager.send_to_gateway(wire_server_id, "unbind_slave", payload)
 
 
 def is_gateway_connected(server_id: str | None) -> bool:

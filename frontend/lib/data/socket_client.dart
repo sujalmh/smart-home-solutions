@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 
+enum SocketConnectionState { disconnected, connecting, reconnecting, connected }
+
 class SocketClient {
   final String url;
   final String path;
@@ -16,15 +18,20 @@ class SocketClient {
   final _responseController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _statusController = StreamController<Map<String, dynamic>>.broadcast();
+  final _connectionController =
+      StreamController<SocketConnectionState>.broadcast();
 
   SocketClient({required this.url, required this.path});
 
   Stream<Map<String, dynamic>> get responses => _responseController.stream;
   Stream<Map<String, dynamic>> get status => _statusController.stream;
+  Stream<SocketConnectionState> get connectionState =>
+      _connectionController.stream;
 
   void connect({String? token}) {
     _token = token;
     _shouldReconnect = true;
+    _emitConnection(SocketConnectionState.connecting);
     _connect();
   }
 
@@ -36,6 +43,7 @@ class SocketClient {
     _subscription = null;
     _channel?.sink.close(ws_status.goingAway);
     _channel = null;
+    _emitConnection(SocketConnectionState.disconnected);
   }
 
   void emit(String event, Map<String, dynamic> data) {
@@ -51,6 +59,7 @@ class SocketClient {
     disconnect();
     _responseController.close();
     _statusController.close();
+    _connectionController.close();
   }
 
   void _connect() {
@@ -59,6 +68,13 @@ class SocketClient {
     }
     final uri = _buildUri(_token);
     _channel = WebSocketChannel.connect(uri);
+    unawaited(
+      _channel!.ready
+          .then((_) {
+            _emitConnection(SocketConnectionState.connected);
+          })
+          .catchError((_) {}),
+    );
     _subscription = _channel!.stream.listen(
       _handleMessage,
       onDone: _handleDisconnect,
@@ -71,7 +87,10 @@ class SocketClient {
     _subscription = null;
     _channel = null;
     if (_shouldReconnect) {
+      _emitConnection(SocketConnectionState.reconnecting);
       _scheduleReconnect();
+    } else {
+      _emitConnection(SocketConnectionState.disconnected);
     }
   }
 
@@ -162,5 +181,12 @@ class SocketClient {
       return data.map((key, value) => MapEntry(key.toString(), value));
     }
     return {};
+  }
+
+  void _emitConnection(SocketConnectionState state) {
+    if (_connectionController.isClosed) {
+      return;
+    }
+    _connectionController.add(state);
   }
 }

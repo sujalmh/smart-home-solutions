@@ -58,9 +58,9 @@ const bool LOG_VERBOSE = true;
 const bool REQUIRE_BINDING = true;
 const uint16_t UDP_DISCOVERY_PORT = 6000;
 const unsigned long SEEN_TTL_MS = 30000;
-const unsigned long COMMAND_COOLDOWN_MS = 300;
-const unsigned long STATUS_COOLDOWN_MS = 1000;
-const unsigned long STATUS_FANOUT_DELAY_MS = 150;
+const unsigned long COMMAND_COOLDOWN_MS = 150;
+const unsigned long STATUS_COOLDOWN_MS = 250;
+const unsigned long STATUS_FANOUT_DELAY_MS = 120;
 
 // Slave mapping
 struct SlaveEntry {
@@ -73,6 +73,11 @@ SlaveEntry slaves[MAX_SLAVES];
 size_t slaveCount = 0;
 unsigned long lastCommandMs[MAX_SLAVES];
 unsigned long lastStatusMs[MAX_SLAVES];
+String lastCommandComp[MAX_SLAVES];
+String lastStatusComp[MAX_SLAVES];
+int lastCommandMod[MAX_SLAVES];
+int lastCommandStat[MAX_SLAVES];
+int lastCommandVal[MAX_SLAVES];
 
 static const size_t MAX_PENDING = 32;
 String pendingSlaves[MAX_PENDING];
@@ -87,6 +92,15 @@ size_t seenCount = 0;
 WiFiServer tcpServer(TCP_PORT);
 WebSocketsClient webSocket;
 WiFiUDP udp;
+
+struct StatusFanoutState {
+  bool active;
+  String devId;
+  uint8_t nextComp;
+  unsigned long nextAtMs;
+};
+
+StatusFanoutState statusFanout = {false, "", 0, 0};
 
 String normalizeId(const String& value) {
   if (value.startsWith("RSW-")) {
@@ -231,6 +245,11 @@ void upsertSlave(const String& id, const String& ip) {
     slaves[slaveCount++] = {id, ip};
     lastCommandMs[slaveCount - 1] = 0;
     lastStatusMs[slaveCount - 1] = 0;
+    lastCommandComp[slaveCount - 1] = "";
+    lastStatusComp[slaveCount - 1] = "";
+    lastCommandMod[slaveCount - 1] = 0;
+    lastCommandStat[slaveCount - 1] = 0;
+    lastCommandVal[slaveCount - 1] = 0;
   }
 }
 
@@ -239,23 +258,34 @@ bool sendHttpGet(const String& ip, const String& path) {
     logLine("HTTP skip: missing slave IP");
     return false;
   }
-  WiFiClient client;
-  HTTPClient http;
   String url = "http://" + ip + ":" + String(SLAVE_HTTP_PORT) + path;
   logLine("HTTP GET -> " + url);
-  http.setTimeout(5000);
-  if (!http.begin(client, url)) {
-    logLine("HTTP begin failed");
-    return false;
-  }
-  int code = http.GET();
-  if (code <= 0) {
+
+  static const int HTTP_ATTEMPTS = 2;
+  for (int attempt = 0; attempt < HTTP_ATTEMPTS; attempt++) {
+    WiFiClient client;
+    HTTPClient http;
+    http.setTimeout(1200);
+    if (!http.begin(client, url)) {
+      logLine("HTTP begin failed");
+      return false;
+    }
+
+    int code = http.GET();
+    if (code > 0) {
+      logLine("HTTP status: " + String(code));
+      http.end();
+      return code < 400;
+    }
+
     logLine("HTTP error: " + http.errorToString(code));
-  } else {
-    logLine("HTTP status: " + String(code));
+    http.end();
+    if (attempt + 1 < HTTP_ATTEMPTS) {
+      delay(30);
+      webSocket.loop();
+    }
   }
-  http.end();
-  return code > 0 && code < 400;
+  return false;
 }
 
 String urlEncode(const String& value) {
@@ -350,6 +380,8 @@ void handleUdpDiscovery() {
   if (packetSize <= 0) {
     return;
   }
+  IPAddress remoteIp = udp.remoteIP();
+  uint16_t remotePort = udp.remotePort();
   char buffer[128];
   int len = udp.read(buffer, sizeof(buffer) - 1);
   if (len <= 0) {
@@ -370,6 +402,12 @@ void handleUdpDiscovery() {
   String clientId = normalizeId(tokens[0]);
   String ip = tokens[1];
   recordSeen(clientId, ip, false);
+
+  String reply = "mrg=" + String(SERVER_ID) + ";" + WiFi.localIP().toString();
+  udp.beginPacket(remoteIp, remotePort);
+  udp.write(reinterpret_cast<const uint8_t*>(reply.c_str()), reply.length());
+  udp.endPacket();
+
   if (isPendingSlave(clientId)) {
     removePendingSlave(clientId);
     upsertSlave(clientId, ip);
@@ -465,19 +503,36 @@ void handleTcpLine(const String& line, const String& remoteIp) {
 }
 
 void handleTcpClients() {
-  WiFiClient client = tcpServer.available();
-  if (!client) {
-    return;
-  }
+  while (true) {
+    WiFiClient client = tcpServer.available();
+    if (!client) {
+      return;
+    }
 
-  client.setTimeout(50);
-  String remoteIp = client.remoteIP().toString();
-  String line = client.readStringUntil('\n');
-  line.trim();
-  if (line.length() > 0) {
-    handleTcpLine(line, remoteIp);
+    client.setTimeout(250);
+    String remoteIp = client.remoteIP().toString();
+    unsigned long lastDataMs = millis();
+
+    while (client.connected() || client.available()) {
+      webSocket.loop();
+      processStatusFanout();
+      while (client.available()) {
+        String line = client.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) {
+          handleTcpLine(line, remoteIp);
+        }
+        lastDataMs = millis();
+      }
+
+      if (millis() - lastDataMs > 120) {
+        break;
+      }
+      delay(2);
+    }
+
+    client.stop();
   }
-  client.stop();
 }
 
 void sendCommandToSlave(const String& devId, const String& comp, int mod, int stat, int val) {
@@ -489,11 +544,22 @@ void sendCommandToSlave(const String& devId, const String& comp, int mod, int st
   int idx = findSlaveIndex(devId);
   unsigned long now = millis();
   if (idx >= 0 && now - lastCommandMs[idx] < COMMAND_COOLDOWN_MS) {
-    logLine("Command skip: cooldown " + devId);
-    return;
+    bool samePayload =
+        lastCommandComp[idx] == comp &&
+        lastCommandMod[idx] == mod &&
+        lastCommandStat[idx] == stat &&
+        lastCommandVal[idx] == val;
+    if (samePayload) {
+      logLine("Command skip: cooldown " + devId + " " + comp);
+      return;
+    }
   }
   if (idx >= 0) {
     lastCommandMs[idx] = now;
+    lastCommandComp[idx] = comp;
+    lastCommandMod[idx] = mod;
+    lastCommandStat[idx] = stat;
+    lastCommandVal[idx] = val;
   }
   String payload = devId + ";" + comp + ";" + String(mod) + ";" + String(stat) + ";" +
                    String(val) + ";";
@@ -510,15 +576,48 @@ void sendStatusToSlave(const String& devId, const String& comp) {
   int idx = findSlaveIndex(devId);
   unsigned long now = millis();
   if (idx >= 0 && now - lastStatusMs[idx] < STATUS_COOLDOWN_MS) {
-    logLine("Status skip: cooldown " + devId);
-    return;
+    if (lastStatusComp[idx] == comp) {
+      logLine("Status skip: cooldown " + devId + " " + comp);
+      return;
+    }
   }
   if (idx >= 0) {
     lastStatusMs[idx] = now;
+    lastStatusComp[idx] = comp;
   }
-  String payload = devId + ";" + comp;
+  String payload = devId + ";" + comp + ";";
   String path = "/?usrini=" + urlEncode(payload);
   sendHttpGet(ip, path);
+}
+
+void startStatusFanout(const String& devId) {
+  statusFanout.active = true;
+  statusFanout.devId = devId;
+  statusFanout.nextComp = 0;
+  statusFanout.nextAtMs = millis();
+}
+
+void processStatusFanout() {
+  if (!statusFanout.active) {
+    return;
+  }
+  unsigned long now = millis();
+  if (now < statusFanout.nextAtMs) {
+    return;
+  }
+
+  String comp = "Comp" + String(statusFanout.nextComp);
+  sendStatusToSlave(statusFanout.devId, comp);
+  statusFanout.nextComp++;
+
+  if (statusFanout.nextComp >= 4) {
+    statusFanout.active = false;
+    statusFanout.devId = "";
+    statusFanout.nextComp = 0;
+    statusFanout.nextAtMs = 0;
+    return;
+  }
+  statusFanout.nextAtMs = now + STATUS_FANOUT_DELAY_MS;
 }
 
 void handleCommand(JsonObject data) {
@@ -544,13 +643,7 @@ void handleStatus(JsonObject data) {
   String comp     = String(data["comp"] | "");
   if (comp.length() == 0) {
     logLine("WebSocket status dev=" + devId + " comp=*" );
-    sendStatusToSlave(devId, "Comp0");
-    delay(STATUS_FANOUT_DELAY_MS);
-    sendStatusToSlave(devId, "Comp1");
-    delay(STATUS_FANOUT_DELAY_MS);
-    sendStatusToSlave(devId, "Comp2");
-    delay(STATUS_FANOUT_DELAY_MS);
-    sendStatusToSlave(devId, "Comp3");
+    startStatusFanout(devId);
   } else {
     logLine("WebSocket status dev=" + devId + " comp=" + comp);
     sendStatusToSlave(devId, comp);
@@ -589,6 +682,13 @@ void handleUnbindSlave(JsonObject data) {
   removePendingSlave(clientId);
   for (size_t i = 0; i < slaveCount; i++) {
     if (slaves[i].id == clientId) {
+      lastCommandMs[i] = lastCommandMs[slaveCount - 1];
+      lastStatusMs[i] = lastStatusMs[slaveCount - 1];
+      lastCommandComp[i] = lastCommandComp[slaveCount - 1];
+      lastStatusComp[i] = lastStatusComp[slaveCount - 1];
+      lastCommandMod[i] = lastCommandMod[slaveCount - 1];
+      lastCommandStat[i] = lastCommandStat[slaveCount - 1];
+      lastCommandVal[i] = lastCommandVal[slaveCount - 1];
       slaves[i] = slaves[slaveCount - 1];
       slaveCount--;
       break;
@@ -659,6 +759,7 @@ void setup() {
   webSocket.beginSSL(SOCKET_HOST, SOCKET_PORT, SOCKET_PATH);
   webSocket.onEvent(onWebSocketEvent);
   webSocket.setReconnectInterval(5000);
+  webSocket.enableHeartbeat(15000, 3000, 2);
 
   logLine("WebSocket WSS starting...");
 }
@@ -667,4 +768,5 @@ void loop() {
   webSocket.loop();
   handleTcpClients();
   handleUdpDiscovery();
+  processStatusFanout();
 }

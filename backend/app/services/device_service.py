@@ -33,7 +33,9 @@ async def send_device_command(
     server_id = _normalize_id(device.server_id)
     dev_id = _normalize_id(device.client_id)
 
-    await emit_gateway_command(server_id, dev_id, comp, mod, stat, val)
+    delivered = await emit_gateway_command(server_id, dev_id, comp, mod, stat, val)
+    if not delivered:
+        raise ValueError("gateway_offline")
 
     module = await session.get(SwitchModule, {"client_id": dev_id, "comp_id": comp})
     if module is None:
