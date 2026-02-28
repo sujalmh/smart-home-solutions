@@ -46,7 +46,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     await ref
         .read(deviceRepositoryProvider)
         .bindSlave(serverId: widget.serverId, clientId: clientId);
-    ref.refresh(clientsProvider(widget.serverId));
+    ref.invalidate(clientsProvider(widget.serverId));
     await _loadSeen();
   }
 
@@ -54,7 +54,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     await ref
         .read(deviceRepositoryProvider)
         .unbindSlave(serverId: widget.serverId, clientId: clientId);
-    ref.refresh(clientsProvider(widget.serverId));
+    ref.invalidate(clientsProvider(widget.serverId));
   }
 
   Future<void> _requestStatus(String clientId) async {
@@ -115,7 +115,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const _EmptySection(
+              error: (_, _) => const _EmptySection(
                 message: 'Failed to load connected devices.',
               ),
             ),
@@ -158,7 +158,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const _EmptySection(
+                error: (_, _) => const _EmptySection(
                   message: 'Failed to load discovered devices.',
                 ),
               ),
@@ -225,13 +225,13 @@ class _HeaderCard extends StatelessWidget {
     final label = statusAsync.when(
       data: (online) => online ? 'Gateway online' : 'Gateway offline',
       loading: () => 'Checking gateway...',
-      error: (_, __) => 'Gateway status unknown',
+      error: (_, _) => 'Gateway status unknown',
     );
     final color = statusAsync.when(
       data: (online) =>
           online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
       loading: () => const Color(0xFF7A8C8B),
-      error: (_, __) => const Color(0xFF7A8C8B),
+      error: (_, _) => const Color(0xFF7A8C8B),
     );
 
     return Container(
@@ -247,7 +247,7 @@ class _HeaderCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.router_outlined, color: color),
@@ -264,7 +264,7 @@ class _HeaderCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   label,
-                  style: TextStyle(color: Colors.black.withOpacity(0.6)),
+                  style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
                 ),
               ],
             ),
@@ -359,7 +359,7 @@ class _DeviceCard extends StatelessWidget {
           ),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.black.withOpacity(0.6)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 10),
           Row(
@@ -370,7 +370,7 @@ class _DeviceCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F7B7A).withOpacity(0.12),
+                  color: const Color(0xFF0F7B7A).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(

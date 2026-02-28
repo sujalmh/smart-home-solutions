@@ -19,7 +19,6 @@ class SmartHomeApp extends ConsumerWidget {
         primary: Color(0xFF0F7B7A),
         secondary: Color(0xFFEDA84A),
         surface: Color(0xFFFDFBF7),
-        background: Color(0xFFF7F4EE),
       ),
       useMaterial3: true,
     );

@@ -43,12 +43,10 @@ class DeviceRepository {
   }) async {
     final normalizedServer = _normalizeId(serverId);
     final normalizedDev = _normalizeId(devId);
-    final response = await api
-        .postList('/api/devices/$normalizedServer/status', {
-          'serverID': normalizedServer,
-          'devID': normalizedDev,
-          if (comp != null) 'comp': comp,
-        });
+    final response = await api.postList(
+      '/api/devices/$normalizedServer/status',
+      {'serverID': normalizedServer, 'devID': normalizedDev, 'comp': ?comp},
+    );
     return response
         .map((item) => SwitchModule.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -62,8 +60,8 @@ class DeviceRepository {
     final normalizedServer = _normalizeId(serverId);
     await api.postJson('/api/devices/$normalizedServer/config/server', {
       'server_id': normalizedServer,
-      if (password != null) 'pwd': password,
-      if (ip != null) 'ip': ip,
+      'pwd': ?password,
+      'ip': ?ip,
     });
   }
 

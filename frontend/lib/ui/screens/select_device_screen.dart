@@ -43,7 +43,7 @@ class SelectDeviceScreen extends ConsumerWidget {
                   }
                   return ListView.separated(
                     itemCount: servers.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (_, index) {
                       final server = servers[index];
                       return ListTile(
@@ -66,7 +66,7 @@ class SelectDeviceScreen extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) =>
+                error: (_, _) =>
                     const Center(child: Text('Unable to load gateways.')),
               ),
             ),

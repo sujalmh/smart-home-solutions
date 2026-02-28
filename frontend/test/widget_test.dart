@@ -11,9 +11,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:frontend/app.dart';
 
 void main() {
-  testWidgets('App shows home title', (WidgetTester tester) async {
+  testWidgets('App shows sign in screen by default', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const ProviderScope(child: SmartHomeApp()));
 
-    expect(find.text('Smart Home'), findsOneWidget);
+    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
   });
 }

@@ -95,7 +95,7 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
               const SizedBox(height: 6),
               Text(
                 'Control your home remotely from any network once signed in.',
-                style: TextStyle(color: Colors.black.withOpacity(0.6)),
+                style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
               ),
               const SizedBox(height: 20),
               Container(

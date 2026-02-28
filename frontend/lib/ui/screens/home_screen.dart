@@ -57,7 +57,7 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(
                   'Remote control works when your gateway is online and reachable by backend.',
-                  style: TextStyle(color: Colors.black.withOpacity(0.6)),
+                  style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
                 ),
                 const SizedBox(height: 18),
                 Expanded(
@@ -70,7 +70,7 @@ class HomeScreen extends ConsumerWidget {
                       }
                       return ListView.separated(
                         itemCount: servers.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
                         itemBuilder: (_, index) => _GatewayCard(
                           server: servers[index],
                           onConfigure: () => Navigator.push(
@@ -102,7 +102,7 @@ class HomeScreen extends ConsumerWidget {
                     },
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (_, __) =>
+                    error: (_, _) =>
                         const Center(child: Text('Unable to load gateways.')),
                   ),
                 ),
@@ -192,7 +192,7 @@ class _EmptyState extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 18,
               offset: const Offset(0, 10),
             ),
@@ -248,13 +248,13 @@ class _GatewayCard extends ConsumerWidget {
     final statusLabel = statusAsync.when(
       data: (online) => online ? 'Online' : 'Offline',
       loading: () => 'Checking',
-      error: (_, __) => 'Unknown',
+      error: (_, _) => 'Unknown',
     );
     final statusColor = statusAsync.when(
       data: (online) =>
           online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
       loading: () => const Color(0xFF7A8C8B),
-      error: (_, __) => const Color(0xFF7A8C8B),
+      error: (_, _) => const Color(0xFF7A8C8B),
     );
 
     return Container(
@@ -265,7 +265,7 @@ class _GatewayCard extends ConsumerWidget {
         border: Border.all(color: const Color(0xFFE5ECEB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -282,7 +282,7 @@ class _GatewayCard extends ConsumerWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -294,7 +294,10 @@ class _GatewayCard extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
-              Icon(Icons.router_outlined, color: Colors.black.withOpacity(0.3)),
+              Icon(
+                Icons.router_outlined,
+                color: Colors.black.withValues(alpha: 0.3),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -305,7 +308,7 @@ class _GatewayCard extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             'IP ${server.ip}',
-            style: TextStyle(color: Colors.black.withOpacity(0.55)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
           ),
           const SizedBox(height: 14),
           Wrap(

@@ -94,12 +94,12 @@ class _RoomsDashboardScreenState extends ConsumerState<RoomsDashboardScreen> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) =>
+              error: (_, _) =>
                   const Center(child: Text('Unable to load rooms.')),
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('Unable to load homes.')),
+          error: (_, _) => const Center(child: Text('Unable to load homes.')),
         ),
       ),
     );
@@ -174,7 +174,7 @@ class _RoomTabs extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         scrollDirection: Axis.horizontal,
         itemCount: rooms.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, index) {
           final room = rooms[index];
           final selected = room.roomId == selectedRoomId;
@@ -213,7 +213,7 @@ class _DevicePanel extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             'Devices mapped to this room',
-            style: TextStyle(color: Colors.black.withOpacity(0.6)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 14),
           Expanded(
@@ -240,7 +240,7 @@ class _DevicePanel extends ConsumerWidget {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) =>
+              error: (_, _) =>
                   const Center(child: Text('Unable to load devices.')),
             ),
           ),
@@ -279,7 +279,7 @@ class _RoomDeviceCard extends StatelessWidget {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: onlineColor.withOpacity(0.12),
+                  color: onlineColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -304,7 +304,7 @@ class _RoomDeviceCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             device.clientId ?? '-',
-            style: TextStyle(color: Colors.black.withOpacity(0.58)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.58)),
           ),
           const Spacer(),
           Container(

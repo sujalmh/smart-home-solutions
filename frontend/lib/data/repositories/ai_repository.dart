@@ -14,7 +14,7 @@ class AIRepository {
     final payload = <String, dynamic>{
       'message': message,
       'conversation_id': conversationId,
-      if (confirm != null) 'confirm': confirm,
+      'confirm': ?confirm,
     };
     final response = await api.postJson('/api/ai/chat', payload);
     return AIChatResponse.fromJson(response);

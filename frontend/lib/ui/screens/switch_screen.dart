@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/socket_client.dart';
 import '../../models/switch_module.dart';
 import '../../state/providers.dart';
 
@@ -75,7 +76,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
                     .read(switchModulesProvider(widget.clientId).notifier)
                     .refreshFromDevice(widget.serverId);
               } catch (_) {
-                if (!mounted) {
+                if (!context.mounted) {
                   return;
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -102,7 +103,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
             return ListView.separated(
               padding: const EdgeInsets.all(18),
               itemCount: modules.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, index) {
                 final module = modules[index];
                 return _SwitchCard(
@@ -118,8 +119,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) =>
-              const Center(child: Text('Unable to load modules.')),
+          error: (_, _) => const Center(child: Text('Unable to load modules.')),
         ),
       ),
     );

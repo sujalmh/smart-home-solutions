@@ -36,7 +36,7 @@ class RegisterScreen extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               'Use a gateway to discover devices and configure remote control.',
-              style: TextStyle(color: Colors.black.withOpacity(0.6)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -47,7 +47,7 @@ class RegisterScreen extends ConsumerWidget {
                   }
                   return ListView.separated(
                     itemCount: servers.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (_, index) {
                       final server = servers[index];
                       return _GatewayTile(
@@ -72,7 +72,7 @@ class RegisterScreen extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) =>
+                error: (_, _) =>
                     const Center(child: Text('Unable to load gateways.')),
               ),
             ),
@@ -102,13 +102,13 @@ class _GatewayTile extends ConsumerWidget {
     final statusLabel = statusAsync.when(
       data: (online) => online ? 'Online' : 'Offline',
       loading: () => 'Checking',
-      error: (_, __) => 'Unknown',
+      error: (_, _) => 'Unknown',
     );
     final statusColor = statusAsync.when(
       data: (online) =>
           online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
       loading: () => const Color(0xFF7A8C8B),
-      error: (_, __) => const Color(0xFF7A8C8B),
+      error: (_, _) => const Color(0xFF7A8C8B),
     );
 
     return Container(
@@ -134,7 +134,7 @@ class _GatewayTile extends ConsumerWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -150,7 +150,7 @@ class _GatewayTile extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             'IP $ip',
-            style: TextStyle(color: Colors.black.withOpacity(0.6)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 12),
           Wrap(

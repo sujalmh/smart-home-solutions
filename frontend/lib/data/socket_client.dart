@@ -136,9 +136,6 @@ class SocketClient {
     if (decoded == null) {
       return;
     }
-    if (decoded is! Map) {
-      return;
-    }
     final event = decoded['event'];
     final data = decoded['data'];
     if (event == 'response' && data is Map) {

@@ -51,7 +51,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
             return ListView.separated(
               padding: const EdgeInsets.all(20),
               itemCount: clients.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, index) {
                 final client = clients[index];
                 return Container(
@@ -91,7 +91,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                             Text(
                               'IP ${client.ip}',
                               style: TextStyle(
-                                color: Colors.black.withOpacity(0.6),
+                                color: Colors.black.withValues(alpha: 0.6),
                               ),
                             ),
                           ],
@@ -116,8 +116,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) =>
-              const Center(child: Text('Failed to load clients.')),
+          error: (_, _) => const Center(child: Text('Failed to load clients.')),
         ),
       ),
     );

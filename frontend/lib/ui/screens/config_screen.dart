@@ -137,7 +137,7 @@ class _ConfigScreenState extends ConsumerState<ConfigScreen> {
                   });
                 }
                 return DropdownButtonFormField<String>(
-                  value: selected,
+                  initialValue: selected,
                   items: servers
                       .map(
                         (server) => DropdownMenuItem<String>(
@@ -156,7 +156,7 @@ class _ConfigScreenState extends ConsumerState<ConfigScreen> {
                 );
               },
               loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text('Unable to load gateways.'),
+              error: (_, _) => const Text('Unable to load gateways.'),
             ),
           ),
           if (_mode != ConfigMode.client) ...[
@@ -288,7 +288,7 @@ class _ClientPicker extends ConsumerWidget {
           });
         }
         return DropdownButtonFormField<String>(
-          value: selected,
+          initialValue: selected,
           items: clients
               .map(
                 (client) => DropdownMenuItem<String>(
@@ -302,7 +302,7 @@ class _ClientPicker extends ConsumerWidget {
         );
       },
       loading: () => const LinearProgressIndicator(),
-      error: (_, __) => const Text('Unable to load clients.'),
+      error: (_, _) => const Text('Unable to load clients.'),
     );
   }
 }
