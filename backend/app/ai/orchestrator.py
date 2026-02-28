@@ -7,6 +7,7 @@ from typing import TypedDict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
+from pydantic import SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,12 +56,16 @@ class AIOrchestrator:
         self._graph = self._build_graph()
         self._requests_by_conversation: dict[str, deque[float]] = defaultdict(deque)
         self._llm: ChatOpenAI | None = None
-        if settings.openai_api_key:
-            self._llm = ChatOpenAI(
-                api_key=settings.openai_api_key,
-                model=settings.openai_model,
-                temperature=0,
-            )
+        llm_api_key = settings.llm_api_key
+        if llm_api_key:
+            llm_kwargs = {
+                "api_key": SecretStr(llm_api_key),
+                "model": settings.openai_model,
+                "temperature": 0,
+            }
+            if settings.llm_api_base:
+                llm_kwargs["base_url"] = settings.llm_api_base
+            self._llm = ChatOpenAI(**llm_kwargs)
 
     def _build_graph(self):
         graph = StateGraph(GraphState)
