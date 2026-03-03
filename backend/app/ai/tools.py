@@ -107,6 +107,23 @@ def _status_focus_from_message(message: str) -> set[str]:
     return focus
 
 
+def _wants_listing(message: str) -> bool:
+    text = message.lower()
+    return any(
+        phrase in text
+        for phrase in (
+            "which",
+            "what devices",
+            "what switches",
+            "what gateways",
+            "list",
+            "show",
+            "connected devices",
+            "online devices",
+        )
+    )
+
+
 async def execute_status_query_tool(
     session: AsyncSession,
     payload: ToolInput,
@@ -114,6 +131,7 @@ async def execute_status_query_tool(
 ) -> ToolResult:
     plan = payload.plan
     focus = _status_focus_from_message(utterance)
+    wants_listing = _wants_listing(utterance)
     room = plan.room
 
     gateways_total = int((await session.scalar(select(func.count()).select_from(Server))) or 0)
@@ -200,6 +218,31 @@ async def execute_status_query_tool(
             or 0
         )
 
+    connected_device_names: list[str] = []
+    if wants_listing and "devices" in focus:
+        device_stmt = select(Device.name).where(
+            Device.server_id.is_not(None),
+            Device.client_id.is_not(None),
+            Device.is_active.is_(True),
+        )
+        if room is not None:
+            device_stmt = device_stmt.where(Device.room_id == room.id)
+        name_rows = await session.execute(device_stmt.order_by(Device.name.asc()).limit(8))
+        connected_device_names = list(name_rows.scalars().all())
+
+    switches_on_names: list[str] = []
+    if wants_listing and "switches" in focus:
+        switch_stmt = (
+            select(Device.name, SwitchModule.comp_id)
+            .select_from(SwitchModule)
+            .join(Device, Device.client_id == SwitchModule.client_id)
+            .where(SwitchModule.status == 1)
+        )
+        if room is not None:
+            switch_stmt = switch_stmt.where(Device.room_id == room.id)
+        switch_rows = await session.execute(switch_stmt.order_by(Device.name.asc()).limit(8))
+        switches_on_names = [f"{device} ({comp})" for device, comp in switch_rows.all()]
+
     parts: list[str] = []
     if "gateways" in focus:
         parts.append(f"Gateways: {gateways_total} total, {connected_gateways} connected")
@@ -210,6 +253,11 @@ async def execute_status_query_tool(
             )
         else:
             parts.append(f"Devices: {devices_total} total, {connected_devices} connected")
+        if wants_listing:
+            if connected_device_names:
+                parts.append("Connected devices: " + ", ".join(connected_device_names))
+            else:
+                parts.append("Connected devices: none")
     if "switches" in focus:
         if room is not None and room_switches_total is not None and room_switches_on is not None:
             parts.append(
@@ -217,6 +265,11 @@ async def execute_status_query_tool(
             )
         else:
             parts.append(f"Switches: {switches_total} total, {switches_on} on")
+        if wants_listing:
+            if switches_on_names:
+                parts.append("Switches currently on: " + ", ".join(switches_on_names))
+            else:
+                parts.append("Switches currently on: none")
 
     summary = ". ".join(parts) + "."
     return ToolResult(

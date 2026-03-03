@@ -404,9 +404,16 @@ class AIOrchestrator:
             return {"final_response": final}
 
         if decision.decision == "clarify":
+            room_hint = entities.room.name if entities.room else None
+            scope = f" in {room_hint}" if room_hint else ""
+            reply = (
+                "I need a bit more detail to continue. "
+                f"You can ask things like: 'How many devices are connected{scope}?', "
+                "'Which switches are on?', or 'Turn off lights in living room'."
+            )
             final = FinalResponse(
                 status="clarification",
-                reply="I need more details to continue. Please specify room and/or device.",
+                reply=reply,
                 requires_clarification=True,
                 requires_confirmation=False,
                 intent=intent,
@@ -530,12 +537,6 @@ class AIOrchestrator:
 
     def _is_inventory_query(self, message: str) -> bool:
         text = message.lower()
-        has_count_intent = (
-            "how many" in text
-            or "count" in text
-            or "number of" in text
-            or "total" in text
-        )
         has_inventory_target = any(
             token in text
             for token in (
@@ -553,7 +554,33 @@ class AIOrchestrator:
                 "clients",
             )
         )
-        return has_count_intent and has_inventory_target
+
+        has_count_intent = (
+            "how many" in text
+            or "count" in text
+            or "number of" in text
+            or "total" in text
+        )
+
+        has_status_intent = any(
+            phrase in text
+            for phrase in (
+                "what devices",
+                "which devices",
+                "what gateways",
+                "which gateways",
+                "what switches",
+                "which switches",
+                "connected",
+                "online",
+                "offline",
+                "status",
+                "available",
+                "active",
+            )
+        )
+
+        return has_inventory_target and (has_count_intent or has_status_intent)
 
 
 orchestrator = AIOrchestrator()

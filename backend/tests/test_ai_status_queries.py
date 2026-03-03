@@ -151,3 +151,48 @@ async def test_nlu_fallback_detects_inventory_queries() -> None:
 
     assert output["intent"].action == "status_check"
     assert output["intent"].confidence == 1.0
+
+
+@pytest.mark.asyncio
+async def test_nlu_fallback_detects_non_count_inventory_question() -> None:
+    orchestrator = AIOrchestrator()
+    orchestrator._llm = None  # noqa: SLF001
+
+    output = await orchestrator._nlu(  # noqa: SLF001
+        {
+            "request": AIChatRequest(
+                message="What devices are connected?",
+                conversation_id="fallback-2",
+            ),
+            "pending_plan": None,
+        }
+    )
+
+    assert output["intent"].action == "status_check"
+    assert output["intent"].confidence == 1.0
+
+
+@pytest.mark.asyncio
+async def test_status_query_listing_includes_connected_device_names(
+    session: AsyncSession,
+) -> None:
+    payload = ToolInput(
+        plan=ExecutionPlan(
+            action="status_check",
+            room=RoomRef(id="room-1", name="Living Room"),
+            devices=[],
+            value=None,
+            comp="Comp0",
+            source="ai",
+        )
+    )
+
+    result = await execute_status_query_tool(
+        session,
+        payload,
+        "What devices are connected in living room?",
+    )
+
+    assert result.summary is not None
+    assert "Connected devices:" in result.summary
+    assert "Ceiling Light" in result.summary
