@@ -92,22 +92,23 @@ async def _upsert_module(
     stat: int,
     val: int,
 ) -> SwitchModule | None:
+    """Update an existing module's state.  Never create new rows.
+
+    Module rows are seeded during the explicit ``gateway_bind`` API call
+    with an exact channel count.  The WebSocket path must not add modules
+    beyond that count, otherwise a 1-channel device ends up with 4 switches
+    because the gateway broadcasts status for Comp0-Comp3 indiscriminately.
+    """
     if not client_id or not comp:
         return None
     module = await session.get(SwitchModule, {"client_id": client_id, "comp_id": comp})
     if module is None:
-        module = SwitchModule(
-            client_id=client_id,
-            comp_id=comp,
-            mode=mod,
-            status=stat,
-            value=val,
-        )
-        session.add(module)
-    else:
-        module.mode = mod
-        module.status = stat
-        module.value = val
+        # Module was not seeded during bind → this comp does not belong
+        # to this device's channel layout.  Silently ignore.
+        return None
+    module.mode = mod
+    module.status = stat
+    module.value = val
     await session.commit()
     return module
 

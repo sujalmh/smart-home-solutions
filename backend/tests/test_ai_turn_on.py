@@ -45,6 +45,7 @@ async def session(tmp_path: Path) -> AsyncSession:
 
         db_session.add(Server(server_id="RSW-1001", pwd="1001", ip="192.168.0.10"))
         db_session.add(Client(client_id="RSW-2001", server_id="RSW-1001", pwd="2001", ip=""))
+        db_session.add(Client(client_id="RSW-2002", server_id="RSW-1001", pwd="2002", ip=""))
 
         db_session.add(
             Device(
@@ -62,7 +63,7 @@ async def session(tmp_path: Path) -> AsyncSession:
                 device_id="device-2",
                 room_id="room-1",
                 server_id="RSW-1001",
-                client_id="RSW-2001",
+                client_id="RSW-2002",
                 name="Wall Light",
                 device_type="light",
                 is_active=True,

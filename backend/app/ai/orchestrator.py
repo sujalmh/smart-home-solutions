@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import defaultdict, deque
 from typing import TypedDict
@@ -21,6 +22,7 @@ from ..models.switch_module import SwitchModule
 from ..websocket.server import is_gateway_connected
 from .memory import ConversationMemoryService
 from .schemas import (
+    ActionType,
     AIChatRequest,
     AIChatResponse,
     DeviceRef,
@@ -865,6 +867,70 @@ class AIOrchestrator:
             return True
         bucket.append(now)
         return False
+
+    # Regex patterns for keyword-based device-command detection (no-LLM path)
+    _CMD_ON_RE = re.compile(
+        r"\b(?:turn\s+on|switch\s+on|power\s+on|enable|activate)\b", re.IGNORECASE
+    )
+    _CMD_OFF_RE = re.compile(
+        r"\b(?:turn\s+off|switch\s+off|power\s+off|disable|deactivate)\b", re.IGNORECASE
+    )
+    _CMD_BRIGHTNESS_RE = re.compile(
+        r"\b(?:set\s+brightness|brightness\s+to|dim|dimmer|brighten)\b", re.IGNORECASE
+    )
+    _BRIGHTNESS_VALUE_RE = re.compile(r"\b(\d{1,4})\b")
+    # Captures the room-like phrase after "the/in/in the" — greedy up to end or a stop word
+    _ROOM_RE = re.compile(
+        r"(?:the|in|in\s+the|of\s+the)\s+([a-z][a-z ]{1,30}?)(?:\s+lights?|\s+devices?|\s+switches?|\s+lamps?)?$",
+        re.IGNORECASE,
+    )
+    # Fallback: after removing the command phrase, treat rest as room/device hint
+    _ROOM_FALLBACK_RE = re.compile(
+        r"(?:turn\s+on|turn\s+off|switch\s+on|switch\s+off|power\s+on|power\s+off|enable|disable|activate|deactivate|set\s+brightness\s+(?:to\s+)?\d*|dim|brighten)\s+(?:the\s+)?(.+)",
+        re.IGNORECASE,
+    )
+
+    def _detect_device_command(self, message: str) -> dict | None:
+        """Return NLU output dict if *message* matches a device-command keyword pattern."""
+        text = message.strip()
+        action: ActionType | None = None
+
+        if self._CMD_OFF_RE.search(text):
+            action = "turn_off"
+        elif self._CMD_ON_RE.search(text):
+            action = "turn_on"
+        elif self._CMD_BRIGHTNESS_RE.search(text):
+            action = "set_brightness"
+
+        if action is None:
+            return None
+
+        # --- Extract room hint ---
+        room_hint: str | None = None
+        m = self._ROOM_RE.search(text)
+        if m:
+            room_hint = m.group(1).strip()
+        else:
+            m = self._ROOM_FALLBACK_RE.search(text)
+            if m:
+                room_hint = m.group(1).strip()
+                # Remove trailing device-type words
+                if room_hint:
+                    room_hint = re.sub(
+                        r"\s+(lights?|devices?|switches?|lamps?)$", "", room_hint, flags=re.IGNORECASE
+                    ).strip() or None
+
+        # --- Extract brightness value ---
+        value: int | None = None
+        if action == "set_brightness":
+            vm = self._BRIGHTNESS_VALUE_RE.search(text)
+            if vm:
+                value = max(0, min(1000, int(vm.group(1))))
+
+        return {
+            "intent": Intent(action=action, confidence=1.0),
+            "hint": NLUHint(room=room_hint, value=value),
+        }
 
     def _is_inventory_query(self, message: str) -> bool:
         text = message.lower()

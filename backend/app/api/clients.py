@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.client import Client
-from ..models.device import Device
 from ..models.switch_module import SwitchModule
 from ..models.user import User
 from ..schemas.client import ClientCreate, ClientRead
@@ -58,13 +57,12 @@ async def list_clients(
         return []
 
     client_ids = [client.client_id for client in clients]
-    device_rows = await session.execute(
-        select(Device.client_id, Device.device_type).where(Device.client_id.in_(client_ids))
+    count_rows = await session.execute(
+        select(SwitchModule.client_id, func.count(SwitchModule.comp_id))
+        .where(SwitchModule.client_id.in_(client_ids))
+        .group_by(SwitchModule.client_id)
     )
-    module_counts: dict[str, int] = {}
-    for client_id, device_type in device_rows.all():
-        if client_id not in module_counts:
-            module_counts[client_id] = _module_count_from_device_type(device_type)
+    module_counts: dict[str, int] = {cid: cnt for cid, cnt in count_rows.all()}
 
     return [
         ClientRead.model_validate(
