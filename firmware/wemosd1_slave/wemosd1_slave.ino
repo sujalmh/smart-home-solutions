@@ -64,7 +64,7 @@
 #endif
 
 #ifndef SLAVE_ID
-#define SLAVE_ID "9001"             // Wire ID without RSW-
+#define SLAVE_ID "9003"             // Wire ID without RSW-
 #endif
 
 #ifndef WIFI_SSID_CFG

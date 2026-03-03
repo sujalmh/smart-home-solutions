@@ -1552,7 +1552,7 @@ void setup() {
   webSocket.enableHeartbeat(WS_HEARTBEAT_PING_MS, WS_HEARTBEAT_TIMEOUT_MS,
                             WS_HEARTBEAT_RETRIES);
   connTransition(CONN_CONNECTING, "setup_complete");
-  LOG_CONN("WSS connecting to " + String(SOCKET_HOST) + ":" +
+  LOG_CONN("WS connecting to " + String(SOCKET_HOST) + ":" +
            String(SOCKET_PORT));
 
   // ─── Init diagnostic timers ────────────────────────────────────
