@@ -32,6 +32,13 @@ class RoomDevice extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [deviceId, roomId, serverId, clientId, name, deviceType, isActive];
+  List<Object?> get props => [
+    deviceId,
+    roomId,
+    serverId,
+    clientId,
+    name,
+    deviceType,
+    isActive,
+  ];
 }

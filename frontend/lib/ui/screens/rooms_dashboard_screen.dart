@@ -292,10 +292,7 @@ class _RoomDeviceCard extends StatelessWidget {
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          Text(
-            device.clientId ?? '-',
-            style: TextStyle(color: c.subtitle),
-          ),
+          Text(device.clientId ?? '-', style: TextStyle(color: c.subtitle)),
           const Spacer(),
           Container(
             width: double.infinity,

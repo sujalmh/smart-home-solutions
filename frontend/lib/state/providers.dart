@@ -139,9 +139,6 @@ final switchModulesProvider =
       ),
     );
 
-final chatControllerProvider =
-    StateNotifierProvider<ChatController, ChatState>(
-  (ref) => ChatController(
-    aiRepository: ref.watch(aiRepositoryProvider),
-  ),
+final chatControllerProvider = StateNotifierProvider<ChatController, ChatState>(
+  (ref) => ChatController(aiRepository: ref.watch(aiRepositoryProvider)),
 );

@@ -33,9 +33,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                     const Text('No devices bound yet.'),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => context.push(
-                        '/devices/$serverId',
-                      ),
+                      onPressed: () => context.push('/devices/$serverId'),
                       icon: const Icon(Icons.wifi_tethering),
                       label: const Text('Discover devices'),
                     ),
@@ -61,10 +59,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                           color: c.chipBg,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(
-                          Icons.toggle_on_outlined,
-                          color: c.primary,
-                        ),
+                        child: Icon(Icons.toggle_on_outlined, color: c.primary),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -81,9 +76,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                             const SizedBox(height: 4),
                             Text(
                               'IP ${client.ip}',
-                              style: TextStyle(
-                                color: c.subtitle,
-                              ),
+                              style: TextStyle(color: c.subtitle),
                             ),
                           ],
                         ),

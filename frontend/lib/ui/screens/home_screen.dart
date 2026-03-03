@@ -167,11 +167,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.router_outlined,
-              size: 42,
-              color: c.primary,
-            ),
+            Icon(Icons.router_outlined, size: 42, color: c.primary),
             const SizedBox(height: 12),
             const Text(
               'No gateways found yet',
@@ -258,10 +254,7 @@ class _GatewayCard extends ConsumerWidget {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
-          Text(
-            'IP ${server.ip}',
-            style: TextStyle(color: c.subtitle),
-          ),
+          Text('IP ${server.ip}', style: TextStyle(color: c.subtitle)),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,

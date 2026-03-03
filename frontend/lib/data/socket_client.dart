@@ -110,7 +110,8 @@ class SocketClient {
     // Exponential backoff: base × 2^attempt, capped at max, ±25% jitter.
     final exponential = _baseDelayMs * pow(2, _reconnectAttempts);
     final capped = min(exponential, _maxDelayMs).toInt();
-    final jitter = (capped * _jitterFactor * (2 * _random.nextDouble() - 1)).round();
+    final jitter = (capped * _jitterFactor * (2 * _random.nextDouble() - 1))
+        .round();
     final delay = Duration(milliseconds: capped + jitter);
     _reconnectAttempts++;
     _reconnectTimer = Timer(delay, () {

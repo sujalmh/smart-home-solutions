@@ -134,10 +134,7 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
               ),
               if (authState.errorMessage != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  authState.errorMessage!,
-                  style: TextStyle(color: c.error),
-                ),
+                Text(authState.errorMessage!, style: TextStyle(color: c.error)),
               ],
             ],
           ),

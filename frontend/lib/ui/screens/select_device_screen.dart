@@ -53,9 +53,8 @@ class SelectDeviceScreen extends ConsumerWidget {
                         title: Text('Gateway ${displayId(server.serverId)}'),
                         subtitle: Text('IP ${server.ip}'),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push(
-                          '/configure/${server.serverId}',
-                        ),
+                        onTap: () =>
+                            context.push('/configure/${server.serverId}'),
                       );
                     },
                   );

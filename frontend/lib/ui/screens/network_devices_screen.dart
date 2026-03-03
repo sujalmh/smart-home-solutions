@@ -54,9 +54,9 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
       await _loadSeen();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Bind failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Bind failed: $e')));
       }
     }
   }
@@ -69,9 +69,9 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
       ref.invalidate(clientsProvider(widget.serverId));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unbind failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unbind failed: $e')));
       }
     }
   }
@@ -87,9 +87,9 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
           );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Status request failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Status request failed: $e')));
       }
     }
   }
@@ -284,10 +284,7 @@ class _HeaderCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(color: c.subtitle),
-                ),
+                Text(label, style: TextStyle(color: c.subtitle)),
               ],
             ),
           ),
@@ -372,10 +369,7 @@ class _DeviceCard extends StatelessWidget {
                 ),
             ],
           ),
-          Text(
-            subtitle,
-            style: TextStyle(color: c.subtitle),
-          ),
+          Text(subtitle, style: TextStyle(color: c.subtitle)),
           const SizedBox(height: 10),
           Row(
             children: [

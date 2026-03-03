@@ -213,15 +213,15 @@ class AIFinalResponse extends Equatable {
 
   @override
   List<Object?> get props => [
-        status,
-        reply,
-        requiresClarification,
-        requiresConfirmation,
-        intent,
-        entities,
-        plan,
-        result,
-      ];
+    status,
+    reply,
+    requiresClarification,
+    requiresConfirmation,
+    intent,
+    entities,
+    plan,
+    result,
+  ];
 }
 
 class AIChatResponse extends Equatable {

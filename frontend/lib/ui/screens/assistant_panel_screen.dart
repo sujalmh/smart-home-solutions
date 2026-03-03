@@ -73,10 +73,7 @@ class _AssistantPanelScreenState extends ConsumerState<AssistantPanelScreen> {
                   borderRadius: BorderRadius.circular(kChipRadius),
                   border: Border.all(color: c.errorBorder),
                 ),
-                child: Text(
-                  chatState.error!,
-                  style: TextStyle(color: c.error),
-                ),
+                child: Text(chatState.error!, style: TextStyle(color: c.error)),
               ),
             Expanded(
               child: chatState.messages.isEmpty
@@ -96,10 +93,12 @@ class _AssistantPanelScreenState extends ConsumerState<AssistantPanelScreen> {
             ),
             if (chatState.needsConfirmation)
               _ConfirmationBar(
-                onConfirm:
-                    chatState.sending ? null : () => _sendConfirmation(true),
-                onCancel:
-                    chatState.sending ? null : () => _sendConfirmation(false),
+                onConfirm: chatState.sending
+                    ? null
+                    : () => _sendConfirmation(true),
+                onCancel: chatState.sending
+                    ? null
+                    : () => _sendConfirmation(false),
               ),
             _Composer(
               controller: _controller,

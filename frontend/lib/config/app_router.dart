@@ -46,10 +46,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.login,
         builder: (_, _) => const RemoteLoginScreen(),
       ),
-      GoRoute(
-        path: AppRoutes.home,
-        builder: (_, _) => const HomeScreen(),
-      ),
+      GoRoute(path: AppRoutes.home, builder: (_, _) => const HomeScreen()),
       GoRoute(
         path: AppRoutes.assistant,
         builder: (_, _) => const AssistantPanelScreen(),
@@ -68,21 +65,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.configure,
-        builder: (_, state) => ConfigScreen(
-          deviceId: state.pathParameters['deviceId']!,
-        ),
+        builder: (_, state) =>
+            ConfigScreen(deviceId: state.pathParameters['deviceId']!),
       ),
       GoRoute(
         path: AppRoutes.devices,
-        builder: (_, state) => NetworkDevicesScreen(
-          serverId: state.pathParameters['serverId']!,
-        ),
+        builder: (_, state) =>
+            NetworkDevicesScreen(serverId: state.pathParameters['serverId']!),
       ),
       GoRoute(
         path: AppRoutes.switches,
-        builder: (_, state) => RoomSwitchesScreen(
-          serverId: state.pathParameters['serverId']!,
-        ),
+        builder: (_, state) =>
+            RoomSwitchesScreen(serverId: state.pathParameters['serverId']!),
       ),
       GoRoute(
         path: AppRoutes.switchControl,

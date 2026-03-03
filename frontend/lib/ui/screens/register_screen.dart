@@ -53,12 +53,10 @@ class RegisterScreen extends ConsumerWidget {
                       return _GatewayTile(
                         serverId: server.serverId,
                         ip: server.ip,
-                        onConfigure: () => context.push(
-                          '/configure/${server.serverId}',
-                        ),
-                        onDiscover: () => context.push(
-                          '/devices/${server.serverId}',
-                        ),
+                        onConfigure: () =>
+                            context.push('/configure/${server.serverId}'),
+                        onDiscover: () =>
+                            context.push('/devices/${server.serverId}'),
                       );
                     },
                   );
@@ -133,10 +131,7 @@ class _GatewayTile extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            'IP $ip',
-            style: TextStyle(color: c.subtitle),
-          ),
+          Text('IP $ip', style: TextStyle(color: c.subtitle)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,

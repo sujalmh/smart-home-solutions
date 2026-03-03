@@ -278,9 +278,7 @@ class _ClientPicker extends ConsumerWidget {
               const Text('No clients registered yet.'),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () => context.push(
-                  '/devices/$resolvedServer',
-                ),
+                onPressed: () => context.push('/devices/$resolvedServer'),
                 icon: const Icon(Icons.wifi_tethering),
                 label: const Text('Discover devices'),
               ),

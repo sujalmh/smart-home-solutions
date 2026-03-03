@@ -11,20 +11,16 @@ class ChatMessage {
   final String text;
   final AIChatResponse? response;
 
-  const ChatMessage({
-    required this.role,
-    required this.text,
-    this.response,
-  });
+  const ChatMessage({required this.role, required this.text, this.response});
 
   factory ChatMessage.user(String text) =>
       ChatMessage(role: ChatRole.user, text: text);
 
   factory ChatMessage.assistant(AIChatResponse response) => ChatMessage(
-        role: ChatRole.assistant,
-        text: response.response.reply,
-        response: response,
-      );
+    role: ChatRole.assistant,
+    text: response.response.reply,
+    response: response,
+  );
 }
 
 class ChatState {
@@ -32,11 +28,7 @@ class ChatState {
   final bool sending;
   final String? error;
 
-  const ChatState({
-    this.messages = const [],
-    this.sending = false,
-    this.error,
-  });
+  const ChatState({this.messages = const [], this.sending = false, this.error});
 
   ChatState copyWith({
     List<ChatMessage>? messages,
@@ -66,8 +58,8 @@ class ChatController extends StateNotifier<ChatState> {
   final AIRepository _aiRepository;
 
   ChatController({required AIRepository aiRepository})
-      : _aiRepository = aiRepository,
-        super(const ChatState());
+    : _aiRepository = aiRepository,
+      super(const ChatState());
 
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || state.sending) return;

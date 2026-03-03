@@ -11,16 +11,15 @@ class DeviceRepository {
   Future<DeviceCommand> sendCommand(DeviceCommand command) async {
     final nServer = normalizeId(command.serverId);
     final nDev = normalizeId(command.devId);
-    final response = await api
-        .postJson('/api/devices/$nServer/command', {
-          'serverID': nServer,
-          'devID': nDev,
-          'comp': command.comp,
-          'mod': command.mod,
-          'stat': command.stat,
-          'val': command.val,
-          'reqId': ?command.reqId,
-        });
+    final response = await api.postJson('/api/devices/$nServer/command', {
+      'serverID': nServer,
+      'devID': nDev,
+      'comp': command.comp,
+      'mod': command.mod,
+      'stat': command.stat,
+      'val': command.val,
+      'reqId': ?command.reqId,
+    });
     return DeviceCommand(
       serverId: response['serverID'] as String,
       devId: response['devID'] as String,
@@ -40,13 +39,12 @@ class DeviceRepository {
   }) async {
     final nServer = normalizeId(serverId);
     final nDev = normalizeId(devId);
-    final response = await api
-        .postList('/api/devices/$nServer/status', {
-          'serverID': nServer,
-          'devID': nDev,
-          'refresh': refresh,
-          'comp': ?comp,
-        });
+    final response = await api.postList('/api/devices/$nServer/status', {
+      'serverID': nServer,
+      'devID': nDev,
+      'refresh': refresh,
+      'comp': ?comp,
+    });
     return response
         .map((item) => SwitchModule.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -101,9 +99,7 @@ class DeviceRepository {
 
   Future<bool> verifyGateway({required String serverId}) async {
     final nServer = normalizeId(serverId);
-    final response = await api.getJson(
-      '/api/devices/$nServer/gateway/status',
-    );
+    final response = await api.getJson('/api/devices/$nServer/gateway/status');
     return response['online'] == true;
   }
 
@@ -133,9 +129,7 @@ class DeviceRepository {
     required String serverId,
   }) async {
     final nServer = normalizeId(serverId);
-    final response = await api.getList(
-      '/api/devices/$nServer/gateway/seen',
-    );
+    final response = await api.getList('/api/devices/$nServer/gateway/seen');
     return response
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
