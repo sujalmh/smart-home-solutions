@@ -60,11 +60,11 @@
 // Change these per-variant at compile time.
 
 #ifndef NUM_CHANNELS
-#define NUM_CHANNELS 1             // 1 or 4
+#define NUM_CHANNELS 4             // 1 or 4
 #endif
 
 #ifndef SLAVE_ID
-#define SLAVE_ID "9003"             // Wire ID without RSW-
+#define SLAVE_ID "9004"             // Wire ID without RSW-
 #endif
 
 #ifndef WIFI_SSID_CFG

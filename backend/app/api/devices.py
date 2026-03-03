@@ -311,11 +311,8 @@ async def gateway_seen(
 ) -> list[dict[str, str]]:
     normalized_server_id = _normalize_id(server_id)
     seen = await list_seen_slaves(normalized_server_id)
-    result = await session.execute(
-        select(Client.client_id).where(
-            Client.server_id.in_([normalized_server_id, server_id])
-        )
-    )
+    # Exclude slaves bound to ANY server, not just the requesting one
+    result = await session.execute(select(Client.client_id))
     bound_wire = {
         client_id[4:] if client_id.startswith("RSW-") else client_id
         for (client_id,) in result.all()
@@ -390,6 +387,12 @@ async def gateway_bind(
         await session.flush()
         await _seed_default_modules(session, normalized_client_id)
     else:
+        # Reject if already bound to a different server
+        if client.server_id not in (normalized_server_id, server_id, "", None):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Device already bound to server {client.server_id}",
+            )
         client.server_id = normalized_server_id
     await session.commit()
 

@@ -364,7 +364,8 @@ async def _handle_register(data: dict) -> None:
         client = await _ensure_client(session, client_id, server_id)
         if client and isinstance(ip, str) and ip:
             client.ip = ip
-            if server:
+            # Only set server_id if the client is not already bound elsewhere
+            if server and client.server_id in (server.server_id, "", None):
                 client.server_id = server.server_id
             await session.commit()
 
