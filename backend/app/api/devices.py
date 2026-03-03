@@ -386,6 +386,7 @@ async def gateway_bind(
         await session.commit()
 
     client = await _get_client_any(session, payload.client_id)
+    bound_client_id = normalized_client_id
     if client is None:
         client = Client(
             client_id=normalized_client_id,
@@ -395,7 +396,6 @@ async def gateway_bind(
         )
         session.add(client)
         await session.flush()
-        await _seed_default_modules(session, normalized_client_id, payload.channel_count)
     else:
         # Reject if already bound to a different server
         if client.server_id not in (normalized_server_id, server_id, "", None):
@@ -404,6 +404,13 @@ async def gateway_bind(
                 detail=f"Device already bound to server {client.server_id}",
             )
         client.server_id = normalized_server_id
+        bound_client_id = client.client_id
+
+    # Enforce exact channel layout on every bind/rebind.
+    await session.execute(
+        delete(SwitchModule).where(SwitchModule.client_id == bound_client_id)
+    )
+    await _seed_default_modules(session, bound_client_id, payload.channel_count)
     await session.commit()
 
     await emit_gateway_bind(normalized_server_id, normalized_client_id)

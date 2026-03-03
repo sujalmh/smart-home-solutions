@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,15 +26,8 @@ def _alt_id(value: str) -> str | None:
     return None
 
 
-def _module_count_from_device_type(device_type: str | None) -> int:
-    if not device_type:
-        return 4
-    normalized = device_type.strip().lower()
-    if "4ch" in normalized or "4-channel" in normalized or "multi" in normalized:
-        return 4
-    if "switch" in normalized:
-        return 1
-    return 4
+# _module_count_from_device_type removed – module count is now derived
+# from the actual SwitchModule rows seeded during bind.
 
 
 @router.get("", response_model=list[ClientRead])
@@ -98,12 +91,12 @@ async def create_client(
     session.add(client)
     await session.flush()
 
-    default_modules = ["Comp0", "Comp1", "Comp2", "Comp3"]
-    for comp_id in default_modules:
+    count = max(1, min(payload.channel_count, 4))
+    for i in range(count):
         session.add(
             SwitchModule(
                 client_id=normalized_client_id,
-                comp_id=comp_id,
+                comp_id=f"Comp{i}",
                 mode=1,
                 status=0,
                 value=1000,
@@ -149,18 +142,13 @@ async def update_module(
                 SwitchModule, {"client_id": raw_id, "comp_id": comp_id}
             )
     if module is None:
-        module = SwitchModule(
-            client_id=normalized_client_id,
-            comp_id=comp_id,
-            mode=payload.mode,
-            status=payload.status,
-            value=payload.value,
+        raise HTTPException(
+            status_code=404,
+            detail=f"Module {comp_id} not found for client {client_id}",
         )
-        session.add(module)
-    else:
-        module.mode = payload.mode
-        module.status = payload.status
-        module.value = payload.value
+    module.mode = payload.mode
+    module.status = payload.status
+    module.value = payload.value
 
     await session.commit()
     await session.refresh(module)
