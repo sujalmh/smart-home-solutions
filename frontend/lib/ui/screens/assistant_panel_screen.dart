@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../models/ai_chat.dart';
+import '../../state/chat_controller.dart';
 import '../../state/providers.dart';
 
 class AssistantPanelScreen extends ConsumerStatefulWidget {
-  static const routeName = '/assistant';
-
   const AssistantPanelScreen({super.key});
 
   @override
@@ -15,14 +16,8 @@ class AssistantPanelScreen extends ConsumerStatefulWidget {
 }
 
 class _AssistantPanelScreenState extends ConsumerState<AssistantPanelScreen> {
-  static const _conversationId = 'default';
-
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<_ChatMessage> _messages = <_ChatMessage>[];
-
-  bool _sending = false;
-  String? _error;
 
   @override
   void dispose() {
@@ -31,80 +26,9 @@ class _AssistantPanelScreenState extends ConsumerState<AssistantPanelScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _sending) {
-      return;
-    }
-
-    setState(() {
-      _error = null;
-      _sending = true;
-      _messages.add(_ChatMessage.user(text));
-      _controller.clear();
-    });
-    _scrollToBottom();
-
-    try {
-      final response = await ref
-          .read(aiRepositoryProvider)
-          .sendMessage(message: text, conversationId: _conversationId);
-      setState(() {
-        _messages.add(_ChatMessage.assistant(response));
-      });
-    } catch (error) {
-      setState(() {
-        _error = error.toString();
-      });
-    } finally {
-      setState(() {
-        _sending = false;
-      });
-      _scrollToBottom();
-    }
-  }
-
-  Future<void> _sendConfirmation(bool confirm) async {
-    if (_sending) {
-      return;
-    }
-    setState(() {
-      _sending = true;
-      _error = null;
-      _messages.add(
-        _ChatMessage.user(confirm ? 'Confirm action' : 'Cancel action'),
-      );
-    });
-    _scrollToBottom();
-
-    try {
-      final response = await ref
-          .read(aiRepositoryProvider)
-          .sendMessage(
-            message: confirm ? 'confirm' : 'cancel',
-            conversationId: _conversationId,
-            confirm: confirm,
-          );
-      setState(() {
-        _messages.add(_ChatMessage.assistant(response));
-      });
-    } catch (error) {
-      setState(() {
-        _error = error.toString();
-      });
-    } finally {
-      setState(() {
-        _sending = false;
-      });
-      _scrollToBottom();
-    }
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) {
-        return;
-      }
+      if (!_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 220),
@@ -113,70 +37,73 @@ class _AssistantPanelScreenState extends ConsumerState<AssistantPanelScreen> {
     });
   }
 
+  Future<void> _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    await ref.read(chatControllerProvider.notifier).sendMessage(text);
+    _scrollToBottom();
+  }
+
+  Future<void> _sendConfirmation(bool confirm) async {
+    await ref.read(chatControllerProvider.notifier).sendConfirmation(confirm);
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
-    AIChatResponse? lastAssistantResponse;
-    for (final message in _messages.reversed) {
-      if (message.role == _MessageRole.assistant && message.response != null) {
-        lastAssistantResponse = message.response;
-        break;
-      }
-    }
-    final needsConfirmation =
-        lastAssistantResponse?.response.requiresConfirmation == true;
+    final chatState = ref.watch(chatControllerProvider);
+    final c = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Assistant Panel')),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(c),
         ),
         child: Column(
           children: [
-            if (_error != null)
+            if (chatState.error != null)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFEFEA),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFF0BAA8)),
+                  color: c.errorBg,
+                  borderRadius: BorderRadius.circular(kChipRadius),
+                  border: Border.all(color: c.errorBorder),
                 ),
                 child: Text(
-                  _error!,
-                  style: const TextStyle(color: Color(0xFF8A3D28)),
+                  chatState.error!,
+                  style: TextStyle(color: c.error),
                 ),
               ),
             Expanded(
-              child: _messages.isEmpty
+              child: chatState.messages.isEmpty
                   ? const _EmptyAssistantState()
                   : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                      itemCount: _messages.length,
+                      itemCount: chatState.messages.length,
                       itemBuilder: (_, index) {
-                        final message = _messages[index];
-                        if (message.role == _MessageRole.user) {
+                        final message = chatState.messages[index];
+                        if (message.role == ChatRole.user) {
                           return _UserBubble(text: message.text);
                         }
-                        final response = message.response!;
-                        return _AssistantBubble(data: response);
+                        return _AssistantBubble(data: message.response!);
                       },
                     ),
             ),
-            if (needsConfirmation)
+            if (chatState.needsConfirmation)
               _ConfirmationBar(
-                onConfirm: _sending ? null : () => _sendConfirmation(true),
-                onCancel: _sending ? null : () => _sendConfirmation(false),
+                onConfirm:
+                    chatState.sending ? null : () => _sendConfirmation(true),
+                onCancel:
+                    chatState.sending ? null : () => _sendConfirmation(false),
               ),
             _Composer(
               controller: _controller,
-              sending: _sending,
+              sending: chatState.sending,
               onSend: _sendMessage,
             ),
           ],
@@ -214,12 +141,12 @@ class _Composer extends StatelessWidget {
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFD9E4E3)),
+                  borderRadius: BorderRadius.circular(kButtonRadius),
+                  borderSide: BorderSide(color: context.colors.composerBorder),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFFD9E4E3)),
+                  borderRadius: BorderRadius.circular(kButtonRadius),
+                  borderSide: BorderSide(color: context.colors.composerBorder),
                 ),
               ),
               onSubmitted: (_) => onSend(),
@@ -256,8 +183,8 @@ class _ConfirmationBar extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD9E4E3)),
+        borderRadius: BorderRadius.circular(kButtonRadius),
+        border: Border.all(color: context.colors.composerBorder),
       ),
       child: Row(
         children: [
@@ -281,19 +208,20 @@ class _EmptyAssistantState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Container(
         margin: const EdgeInsets.all(18),
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFD9E4E3)),
+          borderRadius: BorderRadius.circular(kCardRadius),
+          border: Border.all(color: c.composerBorder),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.smart_toy_outlined, size: 36, color: Color(0xFF0F7B7A)),
+            Icon(Icons.smart_toy_outlined, size: 36, color: c.primary),
             SizedBox(height: 10),
             Text(
               'Structured Assistant Ready',
@@ -324,8 +252,8 @@ class _UserBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F7B7A),
-          borderRadius: BorderRadius.circular(14),
+          color: context.colors.primary,
+          borderRadius: BorderRadius.circular(kButtonRadius),
         ),
         child: Text(text, style: const TextStyle(color: Colors.white)),
       ),
@@ -352,8 +280,8 @@ class _AssistantBubble extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFD9E4E3)),
+          borderRadius: BorderRadius.circular(kButtonRadius),
+          border: Border.all(color: context.colors.composerBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,9 +348,9 @@ class _StructuredLine extends StatelessWidget {
       child: Text.rich(
         TextSpan(
           text: '$label: ',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2B3B3A),
+            color: context.colors.heading,
           ),
           children: [
             TextSpan(
@@ -432,32 +360,6 @@ class _StructuredLine extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-enum _MessageRole { user, assistant }
-
-class _ChatMessage {
-  final _MessageRole role;
-  final String text;
-  final AIChatResponse? response;
-
-  const _ChatMessage({
-    required this.role,
-    required this.text,
-    required this.response,
-  });
-
-  factory _ChatMessage.user(String text) {
-    return _ChatMessage(role: _MessageRole.user, text: text, response: null);
-  }
-
-  factory _ChatMessage.assistant(AIChatResponse response) {
-    return _ChatMessage(
-      role: _MessageRole.assistant,
-      text: response.response.reply,
-      response: response,
     );
   }
 }

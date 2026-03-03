@@ -10,7 +10,8 @@ const char* WIFI_PASS = "notpassword";
 const char* MASTER_HOST = "master-gateway.local";
 const uint16_t MASTER_PORT = 6000;
 const uint16_t UDP_DISCOVERY_PORT = 6000;
-const unsigned long DISCOVERY_INTERVAL_MS = 12000;
+const unsigned long DISCOVERY_INTERVAL_MS = 4000;
+const unsigned long DISCOVERY_INTERVAL_ACTIVE_MS = 45000;
 
 // Slave identity (wire ID without RSW-)
 const char* SLAVE_ID = "9001";
@@ -26,7 +27,8 @@ int relayMode[4] = {0, 0, 0, 0};
 int relayValue[4] = {0, 0, 0, 0};
 String pendingReqId[4] = {"", "", "", ""};
 unsigned long lastRegistrationMs = 0;
-const unsigned long REGISTRATION_INTERVAL_MS = 15000;
+const unsigned long REGISTRATION_INTERVAL_MS = 6000;
+const unsigned long MASTER_STALE_MS = 30000;
 unsigned long lastDiscoveryMs = 0;
 IPAddress masterIp;
 unsigned long lastResolveMs = 0;
@@ -35,6 +37,8 @@ const unsigned long STATUS_SEND_INTERVAL_MS = 35;
 bool pendingStatus[4] = {false, false, false, false};
 unsigned long lastStatusSendMs = 0;
 uint8_t statusCursor = 0;
+bool masterLinked = false;
+unsigned long lastMasterContactMs = 0;
 
 int compToIndex(const String& comp) {
   if (comp == "Comp0") return 0;
@@ -100,18 +104,26 @@ void handleUdpAnnouncements() {
   }
   if (masterIp != announcedIp) {
     masterIp = announcedIp;
+    masterLinked = false;
     Serial.println("Discovered master IP via UDP: " + masterIp.toString());
+    sendRegistration();
   }
 }
 
 bool sendLinesToMaster(const String* lines, size_t count) {
   if (!resolveMasterIp()) {
+    if (millis() - lastMasterContactMs > MASTER_STALE_MS) {
+      masterLinked = false;
+    }
     return false;
   }
   WiFiClient client;
   Serial.println("Connecting to master TCP...");
   if (!client.connect(masterIp, MASTER_PORT)) {
     Serial.println("Master TCP connect failed.");
+    if (millis() - lastMasterContactMs > MASTER_STALE_MS) {
+      masterLinked = false;
+    }
     return false;
   }
   Serial.println("Master TCP connected.");
@@ -121,6 +133,8 @@ bool sendLinesToMaster(const String* lines, size_t count) {
   }
   client.flush();
   client.stop();
+  masterLinked = true;
+  lastMasterContactMs = millis();
   Serial.println("Master TCP closed.");
   return true;
 }
@@ -302,15 +316,25 @@ void handleStatusRequest() {
 
 void ensureRegistration() {
   unsigned long now = millis();
-  if (now - lastRegistrationMs >= REGISTRATION_INTERVAL_MS) {
-    Serial.println("Re-registering with master...");
-    sendRegistration();
+  if (now - lastRegistrationMs < REGISTRATION_INTERVAL_MS) {
+    return;
   }
+  bool recentlyLinked = masterLinked && (now - lastMasterContactMs < MASTER_STALE_MS);
+  if (recentlyLinked) {
+    return;
+  }
+  Serial.println("Re-registering with master...");
+  sendRegistration();
 }
 
 void ensureDiscovery() {
   unsigned long now = millis();
-  if (now - lastDiscoveryMs >= DISCOVERY_INTERVAL_MS) {
+  bool recentlyLinked = masterLinked && (now - lastMasterContactMs < MASTER_STALE_MS);
+  bool hasMasterIp = masterIp != IPAddress(0, 0, 0, 0);
+  unsigned long interval = (recentlyLinked && hasMasterIp)
+                               ? DISCOVERY_INTERVAL_ACTIVE_MS
+                               : DISCOVERY_INTERVAL_MS;
+  if (now - lastDiscoveryMs >= interval) {
     sendUdpDiscovery();
     lastDiscoveryMs = now;
   }

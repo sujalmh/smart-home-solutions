@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../state/providers.dart';
-import 'config_screen.dart';
-import 'network_devices_screen.dart';
+import '../../utils/id_utils.dart';
 
 class RegisterScreen extends ConsumerWidget {
-  static const routeName = '/register-device';
-
   const RegisterScreen({super.key});
 
   @override
@@ -36,7 +36,7 @@ class RegisterScreen extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               'Use a gateway to discover devices and configure remote control.',
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+              style: TextStyle(color: context.colors.subtitle),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -53,19 +53,11 @@ class RegisterScreen extends ConsumerWidget {
                       return _GatewayTile(
                         serverId: server.serverId,
                         ip: server.ip,
-                        onConfigure: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ConfigScreen(deviceId: server.serverId),
-                          ),
+                        onConfigure: () => context.push(
+                          '/configure/${server.serverId}',
                         ),
-                        onDiscover: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                NetworkDevicesScreen(serverId: server.serverId),
-                          ),
+                        onDiscover: () => context.push(
+                          '/devices/${server.serverId}',
                         ),
                       );
                     },
@@ -98,6 +90,7 @@ class _GatewayTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final statusAsync = ref.watch(gatewayStatusProvider(serverId));
     final statusLabel = statusAsync.when(
       data: (online) => online ? 'Online' : 'Offline',
@@ -105,26 +98,21 @@ class _GatewayTile extends ConsumerWidget {
       error: (_, _) => 'Unknown',
     );
     final statusColor = statusAsync.when(
-      data: (online) =>
-          online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
-      loading: () => const Color(0xFF7A8C8B),
-      error: (_, _) => const Color(0xFF7A8C8B),
+      data: (online) => online ? c.online : c.offline,
+      loading: () => c.neutral,
+      error: (_, _) => c.neutral,
     );
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Text(
-                'Gateway ${_displayId(serverId)}',
+                'Gateway ${displayId(serverId)}',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
@@ -133,10 +121,7 @@ class _GatewayTile extends ConsumerWidget {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                decoration: AppDecorations.statusChip(statusColor),
                 child: Text(
                   statusLabel,
                   style: TextStyle(
@@ -150,7 +135,7 @@ class _GatewayTile extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             'IP $ip',
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+            style: TextStyle(color: c.subtitle),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -170,11 +155,4 @@ class _GatewayTile extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

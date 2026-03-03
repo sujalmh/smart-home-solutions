@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
+import '../../config/app_router.dart';
 import '../../models/server.dart';
 import '../../state/providers.dart';
-import 'config_screen.dart';
-import 'network_devices_screen.dart';
-import 'rooms_dashboard_screen.dart';
-import 'room_switches_screen.dart';
-import 'assistant_panel_screen.dart';
+import '../../utils/id_utils.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -15,14 +15,11 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final serversAsync = ref.watch(serversProvider);
+    final c = context.colors;
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(c),
         ),
         child: SafeArea(
           child: Padding(
@@ -33,31 +30,23 @@ class HomeScreen extends ConsumerWidget {
                 _Header(
                   onLogout: () =>
                       ref.read(authControllerProvider.notifier).logout(),
-                  onAssistant: () => Navigator.pushNamed(
-                    context,
-                    AssistantPanelScreen.routeName,
-                  ),
-                  onRooms: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const RoomsDashboardScreen(),
-                    ),
-                  ),
+                  onAssistant: () => context.push(AppRoutes.assistant),
+                  onRooms: () => context.push(AppRoutes.rooms),
                   onRefresh: () => ref.refresh(serversProvider),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Gateways linked to your account',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF101414),
+                    color: c.heading,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Remote control works when your gateway is online and reachable by backend.',
-                  style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+                  style: TextStyle(color: c.subtitle),
                 ),
                 const SizedBox(height: 18),
                 Expanded(
@@ -73,29 +62,14 @@ class HomeScreen extends ConsumerWidget {
                         separatorBuilder: (_, _) => const SizedBox(height: 14),
                         itemBuilder: (_, index) => _GatewayCard(
                           server: servers[index],
-                          onConfigure: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ConfigScreen(
-                                deviceId: servers[index].serverId,
-                              ),
-                            ),
+                          onConfigure: () => context.push(
+                            '/configure/${servers[index].serverId}',
                           ),
-                          onDevices: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => NetworkDevicesScreen(
-                                serverId: servers[index].serverId,
-                              ),
-                            ),
+                          onDevices: () => context.push(
+                            '/devices/${servers[index].serverId}',
                           ),
-                          onSwitches: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => RoomSwitchesScreen(
-                                serverId: servers[index].serverId,
-                              ),
-                            ),
+                          onSwitches: () => context.push(
+                            '/switches/${servers[index].serverId}',
                           ),
                         ),
                       );
@@ -130,12 +104,13 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
                 'Smart Home',
                 style: TextStyle(
@@ -147,7 +122,7 @@ class _Header extends StatelessWidget {
               SizedBox(height: 6),
               Text(
                 'Live control with real-time updates.',
-                style: TextStyle(fontSize: 15, color: Color(0xFF5C6B6B)),
+                style: TextStyle(fontSize: 15, color: c.subtitle),
               ),
             ],
           ),
@@ -184,27 +159,18 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
+        decoration: AppDecorations.card(c, radius: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.router_outlined,
               size: 42,
-              color: Color(0xFF0F7B7A),
+              color: c.primary,
             ),
             const SizedBox(height: 12),
             const Text(
@@ -244,6 +210,7 @@ class _GatewayCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final statusAsync = ref.watch(gatewayStatusProvider(server.serverId));
     final statusLabel = statusAsync.when(
       data: (online) => online ? 'Online' : 'Offline',
@@ -251,26 +218,14 @@ class _GatewayCard extends ConsumerWidget {
       error: (_, _) => 'Unknown',
     );
     final statusColor = statusAsync.when(
-      data: (online) =>
-          online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
-      loading: () => const Color(0xFF7A8C8B),
-      error: (_, _) => const Color(0xFF7A8C8B),
+      data: (online) => online ? c.online : c.offline,
+      loading: () => c.neutral,
+      error: (_, _) => c.neutral,
     );
 
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      decoration: AppDecorations.card(c, radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -281,10 +236,7 @@ class _GatewayCard extends ConsumerWidget {
                   horizontal: 10,
                   vertical: 6,
                 ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                decoration: AppDecorations.statusChip(statusColor),
                 child: Text(
                   statusLabel,
                   style: TextStyle(
@@ -302,13 +254,13 @@ class _GatewayCard extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Gateway ${_displayId(server.serverId)}',
+            'Gateway ${displayId(server.serverId)}',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
             'IP ${server.ip}',
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.55)),
+            style: TextStyle(color: c.subtitle),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -336,11 +288,4 @@ class _GatewayCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

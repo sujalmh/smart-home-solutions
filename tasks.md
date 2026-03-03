@@ -52,3 +52,35 @@
 - [ ] Add analytics correctness tests (sparse logs, missing intervals, DST/timezone boundaries).
 - [ ] Add end-to-end tests for AI text/voice commands, ambiguous prompts, denied actions, and offline fallback.
 - [ ] Execute staged rollout plan (feature flags, migration checks, monitoring), then remove deprecated server-centric endpoints.
+
+## Firmware Refactoring (Completed 2026)
+
+### Slave Firmware
+- [x] Audit all firmware files (master gateway, 1ch slave, 4ch slave) for architecture pain points.
+- [x] Merge `wemosd1_slave_1ch` and `wemosd1_slave_4ch` into unified `firmware/wemosd1_slave/wemosd1_slave.ino` with `NUM_CHANNELS` parameterisation.
+- [x] Add `SlaveState` enum state machine (DISCONNECTED → DISCOVERING → REGISTERING → LINKED → STALE).
+- [x] Add exponential backoff with jitter for discovery (base 2s, max 60s, ×2 multiplier).
+- [x] Add WiFi reconnect logic with restart after 5 consecutive failures.
+- [x] Add bounded WiFi setup timeout (30s then restart).
+- [x] Add ESP8266 hardware WDT feeding and software loop watchdog (2s warn).
+- [x] Add structured logging with prefixes `[STATE]`, `[WIFI]`, `[DISC]`, `[REG]`, `[CMD]`, `[STA]`, `[WDT]`.
+- [x] Add `handlePing()` endpoint for master health checks.
+- [x] Retire old `wemosd1_slave_1ch/` and `wemosd1_slave_4ch/` directories with README pointers.
+
+### Master Gateway
+- [x] Rewrite `firmware/esp32_master_gateway/esp32_master_gateway.ino` for production hardening (~900 lines, 22 sections).
+- [x] Add `ConnState` WS connection state machine with exponential backoff (base 2s, max 60s, restart after 20 failures).
+- [x] Add `SlaveHealth` tracking (ACTIVE/STALE) with ping (60s interval, 3 missed → stale) and data-timeout stale detection (90s).
+- [x] Add NVS persistence for slave bindings (survive reboots).
+- [x] Add command pipeline with in-flight coalescing, retry (2 attempts), and queue eviction (oldest non-in-flight dropped).
+- [x] Add status fanout ring buffer (depth 8) replacing single-struct approach.
+- [x] Add master-side status dedup cache (1s TTL, 64 entries).
+- [x] Add seen cache with TTL cleanup and throttled `slave_seen` WS events.
+- [x] Add `gateway_heartbeat` event (uptime, slave_count, queue_depth, free_heap) emitted every 60s.
+- [x] Add ESP32 hardware watchdog (10s task WDT) and software loop timing monitor (500ms warn).
+- [x] Add periodic serial metrics logging (queue depth, in-flight, active/stale slaves, heap).
+- [x] Add auto-refresh for silent bound slaves after 120s of no data.
+
+### Backend
+- [x] Add `gateway_heartbeat` event handler in `backend/app/websocket/server.py`.
+- [x] Add `gateway_heartbeats` dict to `WebSocketManager` for liveness tracking.

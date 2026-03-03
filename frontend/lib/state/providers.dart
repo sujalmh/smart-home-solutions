@@ -11,6 +11,7 @@ import '../data/repositories/room_repository.dart';
 import '../data/repositories/server_repository.dart';
 import 'auth_controller.dart';
 import 'auth_state.dart';
+import 'chat_controller.dart';
 import 'switch_modules_controller.dart';
 import '../models/home.dart';
 import '../models/switch_module.dart';
@@ -137,3 +138,10 @@ final switchModulesProvider =
         deviceRepository: ref.watch(deviceRepositoryProvider),
       ),
     );
+
+final chatControllerProvider =
+    StateNotifierProvider<ChatController, ChatState>(
+  (ref) => ChatController(
+    aiRepository: ref.watch(aiRepositoryProvider),
+  ),
+);

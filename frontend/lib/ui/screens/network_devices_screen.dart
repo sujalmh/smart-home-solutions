@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../state/providers.dart';
-import 'switch_screen.dart';
+import '../../utils/id_utils.dart';
 
 class NetworkDevicesScreen extends ConsumerStatefulWidget {
   final String serverId;
@@ -43,28 +46,52 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
   }
 
   Future<void> _bind(String clientId) async {
-    await ref
-        .read(deviceRepositoryProvider)
-        .bindSlave(serverId: widget.serverId, clientId: clientId);
-    ref.invalidate(clientsProvider(widget.serverId));
-    await _loadSeen();
+    try {
+      await ref
+          .read(deviceRepositoryProvider)
+          .bindSlave(serverId: widget.serverId, clientId: clientId);
+      ref.invalidate(clientsProvider(widget.serverId));
+      await _loadSeen();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bind failed: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _unbind(String clientId) async {
-    await ref
-        .read(deviceRepositoryProvider)
-        .unbindSlave(serverId: widget.serverId, clientId: clientId);
-    ref.invalidate(clientsProvider(widget.serverId));
+    try {
+      await ref
+          .read(deviceRepositoryProvider)
+          .unbindSlave(serverId: widget.serverId, clientId: clientId);
+      ref.invalidate(clientsProvider(widget.serverId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unbind failed: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _requestStatus(String clientId) async {
-    await ref
-        .read(deviceRepositoryProvider)
-        .requestStatus(
-          serverId: widget.serverId,
-          devId: clientId,
-          refresh: true,
+    try {
+      await ref
+          .read(deviceRepositoryProvider)
+          .requestStatus(
+            serverId: widget.serverId,
+            devId: clientId,
+            refresh: true,
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Status request failed: $e')),
         );
+      }
+    }
   }
 
   @override
@@ -74,7 +101,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Gateway ${_displayId(widget.serverId)}'),
+        title: Text('Gateway ${displayId(widget.serverId)}'),
         actions: [
           IconButton(onPressed: _loadSeen, icon: const Icon(Icons.refresh)),
         ],
@@ -97,18 +124,12 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                   children: clients
                       .map(
                         (client) => _DeviceCard(
-                          title: 'Slave ${_displayId(client.clientId)}',
+                          title: 'Slave ${displayId(client.clientId)}',
                           subtitle: 'IP ${client.ip}',
                           statusLabel: 'Connected',
-                          onPrimary: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SwitchScreen(
-                                serverId: widget.serverId,
-                                clientId: client.clientId,
-                                moduleCount: client.moduleCount,
-                              ),
-                            ),
+                          onPrimary: () => context.push(
+                            '/switch/${widget.serverId}/${client.clientId}',
+                            extra: {'moduleCount': client.moduleCount},
                           ),
                           primaryLabel: 'Control',
                           onSecondary: () => _requestStatus(client.clientId),
@@ -135,10 +156,10 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
               boundAsync.when(
                 data: (clients) {
                   final boundIds = clients
-                      .map((c) => _wireId(c.clientId))
+                      .map((c) => wireId(c.clientId))
                       .toSet();
                   final unbound = _seen.where((entry) {
-                    final id = _wireId(entry['clientID']?.toString() ?? '');
+                    final id = wireId(entry['clientID']?.toString() ?? '');
                     return id.isNotEmpty && !boundIds.contains(id);
                   }).toList();
                   if (unbound.isEmpty) {
@@ -151,7 +172,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                         .map(
                           (entry) => _DeviceCard(
                             title:
-                                'Slave ${_displayId(entry['clientID']?.toString() ?? '')}',
+                                'Slave ${displayId(entry['clientID']?.toString() ?? '')}',
                             subtitle: 'IP ${entry['ip'] ?? '-'}',
                             statusLabel: 'New',
                             onPrimary: () =>
@@ -184,7 +205,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Unbind Slave ${_displayId(clientId)}?',
+              'Unbind Slave ${displayId(clientId)}?',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -227,25 +248,21 @@ class _HeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final label = statusAsync.when(
       data: (online) => online ? 'Gateway online' : 'Gateway offline',
       loading: () => 'Checking gateway...',
       error: (_, _) => 'Gateway status unknown',
     );
     final color = statusAsync.when(
-      data: (online) =>
-          online ? const Color(0xFF1E9E7A) : const Color(0xFFE27D60),
-      loading: () => const Color(0xFF7A8C8B),
-      error: (_, _) => const Color(0xFF7A8C8B),
+      data: (online) => online ? c.online : c.offline,
+      loading: () => c.neutral,
+      error: (_, _) => c.neutral,
     );
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(c),
       child: Row(
         children: [
           Container(
@@ -263,13 +280,13 @@ class _HeaderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Gateway ${_displayId(serverId)}',
+                  'Gateway ${displayId(serverId)}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   label,
-                  style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+                  style: TextStyle(color: c.subtitle),
                 ),
               ],
             ),
@@ -303,11 +320,7 @@ class _EmptySection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(context.colors),
       child: Text(message),
     );
   }
@@ -336,14 +349,11 @@ class _DeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -364,7 +374,7 @@ class _DeviceCard extends StatelessWidget {
           ),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+            style: TextStyle(color: c.subtitle),
           ),
           const SizedBox(height: 10),
           Row(
@@ -374,15 +384,12 @@ class _DeviceCard extends StatelessWidget {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F7B7A).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                decoration: AppDecorations.statusChip(c.primary),
                 child: Text(
                   statusLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F7B7A),
+                    color: c.primary,
                   ),
                 ),
               ),
@@ -401,18 +408,4 @@ class _DeviceCard extends StatelessWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
-}
-
-String _wireId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

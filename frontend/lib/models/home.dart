@@ -1,4 +1,6 @@
-class Home {
+import 'package:equatable/equatable.dart';
+
+class Home extends Equatable {
   final String homeId;
   final String name;
 
@@ -10,4 +12,7 @@ class Home {
       name: json['name'] as String,
     );
   }
+
+  @override
+  List<Object?> get props => [homeId, name];
 }

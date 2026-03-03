@@ -1,4 +1,6 @@
-class Server {
+import 'package:equatable/equatable.dart';
+
+class Server extends Equatable {
   final String serverId;
   final String ip;
 
@@ -14,4 +16,7 @@ class Server {
   Map<String, dynamic> toJson() {
     return {'server_id': serverId, 'ip': ip};
   }
+
+  @override
+  List<Object?> get props => [serverId, ip];
 }

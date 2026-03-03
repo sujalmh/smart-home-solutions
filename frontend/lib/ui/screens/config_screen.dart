@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../state/providers.dart';
-import 'network_devices_screen.dart';
+import '../../utils/id_utils.dart';
 
 enum ConfigMode { server, client, both }
 
@@ -46,22 +49,26 @@ class _ConfigScreenState extends ConsumerState<ConfigScreen> {
       return;
     }
 
-    await ref
-        .read(deviceRepositoryProvider)
-        .configureServer(serverId: serverId);
-
-    if (_ssidController.text.trim().isNotEmpty &&
-        _remotePasswordController.text.trim().isNotEmpty) {
+    try {
       await ref
           .read(deviceRepositoryProvider)
-          .configureRemote(
-            serverId: serverId,
-            ssid: _ssidController.text.trim(),
-            password: _remotePasswordController.text.trim(),
-          );
-    }
+          .configureServer(serverId: serverId);
 
-    _showMessage('Server configuration sent.');
+      if (_ssidController.text.trim().isNotEmpty &&
+          _remotePasswordController.text.trim().isNotEmpty) {
+        await ref
+            .read(deviceRepositoryProvider)
+            .configureRemote(
+              serverId: serverId,
+              ssid: _ssidController.text.trim(),
+              password: _remotePasswordController.text.trim(),
+            );
+      }
+
+      _showMessage('Server configuration sent.');
+    } catch (e) {
+      _showMessage('Configuration failed: $e');
+    }
   }
 
   Future<void> _configureClient() async {
@@ -74,16 +81,20 @@ class _ConfigScreenState extends ConsumerState<ConfigScreen> {
       return;
     }
 
-    await ref
-        .read(deviceRepositoryProvider)
-        .configureClient(
-          serverId: serverId,
-          clientId: clientId,
-          password: pwd,
-          ip: ip,
-        );
+    try {
+      await ref
+          .read(deviceRepositoryProvider)
+          .configureClient(
+            serverId: serverId,
+            clientId: clientId,
+            password: pwd,
+            ip: ip,
+          );
 
-    _showMessage('Client configuration sent.');
+      _showMessage('Client configuration sent.');
+    } catch (e) {
+      _showMessage('Configuration failed: $e');
+    }
   }
 
   Future<void> _configureBoth() async {
@@ -142,7 +153,7 @@ class _ConfigScreenState extends ConsumerState<ConfigScreen> {
                       .map(
                         (server) => DropdownMenuItem<String>(
                           value: server.serverId,
-                          child: Text('Gateway ${_displayId(server.serverId)}'),
+                          child: Text('Gateway ${displayId(server.serverId)}'),
                         ),
                       )
                       .toList(),
@@ -267,12 +278,8 @@ class _ClientPicker extends ConsumerWidget {
               const Text('No clients registered yet.'),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        NetworkDevicesScreen(serverId: resolvedServer),
-                  ),
+                onPressed: () => context.push(
+                  '/devices/$resolvedServer',
                 ),
                 icon: const Icon(Icons.wifi_tethering),
                 label: const Text('Discover devices'),
@@ -293,7 +300,7 @@ class _ClientPicker extends ConsumerWidget {
               .map(
                 (client) => DropdownMenuItem<String>(
                   value: client.clientId,
-                  child: Text('Slave ${_displayId(client.clientId)}'),
+                  child: Text('Slave ${displayId(client.clientId)}'),
                 ),
               )
               .toList(),
@@ -317,11 +324,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(context.colors),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -332,11 +335,4 @@ class _SectionCard extends StatelessWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

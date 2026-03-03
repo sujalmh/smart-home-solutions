@@ -1,4 +1,6 @@
-class AuthToken {
+import 'package:equatable/equatable.dart';
+
+class AuthToken extends Equatable {
   final String accessToken;
   final String tokenType;
 
@@ -10,4 +12,7 @@ class AuthToken {
       tokenType: (json['token_type'] as String?) ?? 'bearer',
     );
   }
+
+  @override
+  List<Object?> get props => [accessToken, tokenType];
 }

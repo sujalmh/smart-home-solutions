@@ -1,4 +1,6 @@
-class SwitchModule {
+import 'package:equatable/equatable.dart';
+
+class SwitchModule extends Equatable {
   final String clientId;
   final String compId;
   final int mode;
@@ -32,4 +34,7 @@ class SwitchModule {
       'value': value,
     };
   }
+
+  @override
+  List<Object?> get props => [clientId, compId, mode, status, value];
 }

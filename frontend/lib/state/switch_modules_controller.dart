@@ -6,6 +6,7 @@ import '../data/repositories/client_repository.dart';
 import '../data/repositories/device_repository.dart';
 import '../models/device_command.dart';
 import '../models/switch_module.dart';
+import '../utils/id_utils.dart';
 
 class CommandRateLimitException implements Exception {
   final int waitMs;
@@ -137,7 +138,7 @@ class SwitchModulesController
       return;
     }
 
-    final normalized = _normalizeId(devId);
+    final normalized = normalizeId(devId);
     if (normalized != clientId) {
       return;
     }
@@ -349,13 +350,6 @@ class SwitchModulesController
     if (_staleComps.remove(compId) && notify) {
       _notifyStateUnchanged();
     }
-  }
-
-  String _normalizeId(String devId) {
-    if (devId.startsWith('RSW-')) {
-      return devId;
-    }
-    return 'RSW-$devId';
   }
 
   @override

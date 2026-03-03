@@ -1,17 +1,11 @@
 import '../../models/server.dart';
+import '../../utils/id_utils.dart';
 import '../api_client.dart';
 
 class ServerRepository {
   final ApiClient api;
 
   ServerRepository({required this.api});
-
-  String _normalizeId(String value) {
-    if (value.startsWith('RSW-')) {
-      return value;
-    }
-    return 'RSW-$value';
-  }
 
   Future<List<Server>> listServers() async {
     final response = await api.getList('/api/servers');
@@ -26,7 +20,7 @@ class ServerRepository {
     required String ip,
   }) async {
     final response = await api.postJson('/api/servers', {
-      'server_id': _normalizeId(serverId),
+      'server_id': normalizeId(serverId),
       'pwd': password,
       'ip': ip,
     });

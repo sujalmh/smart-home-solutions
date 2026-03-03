@@ -1,5 +1,6 @@
 import '../../models/device_command.dart';
 import '../../models/switch_module.dart';
+import '../../utils/id_utils.dart';
 import '../api_client.dart';
 
 class DeviceRepository {
@@ -7,20 +8,13 @@ class DeviceRepository {
 
   DeviceRepository({required this.api});
 
-  String _normalizeId(String value) {
-    if (value.startsWith('RSW-')) {
-      return value;
-    }
-    return 'RSW-$value';
-  }
-
   Future<DeviceCommand> sendCommand(DeviceCommand command) async {
-    final normalizedServer = _normalizeId(command.serverId);
-    final normalizedDev = _normalizeId(command.devId);
+    final nServer = normalizeId(command.serverId);
+    final nDev = normalizeId(command.devId);
     final response = await api
-        .postJson('/api/devices/$normalizedServer/command', {
-          'serverID': normalizedServer,
-          'devID': normalizedDev,
+        .postJson('/api/devices/$nServer/command', {
+          'serverID': nServer,
+          'devID': nDev,
           'comp': command.comp,
           'mod': command.mod,
           'stat': command.stat,
@@ -44,12 +38,12 @@ class DeviceRepository {
     String? comp,
     bool refresh = false,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    final normalizedDev = _normalizeId(devId);
+    final nServer = normalizeId(serverId);
+    final nDev = normalizeId(devId);
     final response = await api
-        .postList('/api/devices/$normalizedServer/status', {
-          'serverID': normalizedServer,
-          'devID': normalizedDev,
+        .postList('/api/devices/$nServer/status', {
+          'serverID': nServer,
+          'devID': nDev,
           'refresh': refresh,
           'comp': ?comp,
         });
@@ -63,9 +57,9 @@ class DeviceRepository {
     String? password,
     String? ip,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    await api.postJson('/api/devices/$normalizedServer/config/server', {
-      'server_id': normalizedServer,
+    final nServer = normalizeId(serverId);
+    await api.postJson('/api/devices/$nServer/config/server', {
+      'server_id': nServer,
       'pwd': ?password,
       'ip': ?ip,
     });
@@ -76,8 +70,8 @@ class DeviceRepository {
     required String ssid,
     required String password,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    await api.postJson('/api/devices/$normalizedServer/config/remote', {
+    final nServer = normalizeId(serverId);
+    await api.postJson('/api/devices/$nServer/config/remote', {
       'ssid': ssid,
       'pwd': password,
     });
@@ -89,26 +83,26 @@ class DeviceRepository {
     required String password,
     required String ip,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    final normalizedClient = _normalizeId(clientId);
-    await api.postJson('/api/devices/$normalizedServer/config/client', {
-      'client_id': normalizedClient,
+    final nServer = normalizeId(serverId);
+    final nClient = normalizeId(clientId);
+    await api.postJson('/api/devices/$nServer/config/client', {
+      'client_id': nClient,
       'pwd': password,
       'ip': ip,
     });
   }
 
   Future<void> registerDevice({required String serverId}) async {
-    final normalizedServer = _normalizeId(serverId);
-    await api.postJson('/api/devices/$normalizedServer/register', {
-      'server_id': normalizedServer,
+    final nServer = normalizeId(serverId);
+    await api.postJson('/api/devices/$nServer/register', {
+      'server_id': nServer,
     });
   }
 
   Future<bool> verifyGateway({required String serverId}) async {
-    final normalizedServer = _normalizeId(serverId);
+    final nServer = normalizeId(serverId);
     final response = await api.getJson(
-      '/api/devices/$normalizedServer/gateway/status',
+      '/api/devices/$nServer/gateway/status',
     );
     return response['online'] == true;
   }
@@ -117,10 +111,10 @@ class DeviceRepository {
     required String serverId,
     required String clientId,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    final normalizedClient = _normalizeId(clientId);
-    await api.postJson('/api/devices/$normalizedServer/gateway/bind', {
-      'client_id': normalizedClient,
+    final nServer = normalizeId(serverId);
+    final nClient = normalizeId(clientId);
+    await api.postJson('/api/devices/$nServer/gateway/bind', {
+      'client_id': nClient,
     });
   }
 
@@ -128,19 +122,19 @@ class DeviceRepository {
     required String serverId,
     required String clientId,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
-    final normalizedClient = _normalizeId(clientId);
-    await api.postJson('/api/devices/$normalizedServer/gateway/unbind', {
-      'client_id': normalizedClient,
+    final nServer = normalizeId(serverId);
+    final nClient = normalizeId(clientId);
+    await api.postJson('/api/devices/$nServer/gateway/unbind', {
+      'client_id': nClient,
     });
   }
 
   Future<List<Map<String, dynamic>>> listSeenSlaves({
     required String serverId,
   }) async {
-    final normalizedServer = _normalizeId(serverId);
+    final nServer = normalizeId(serverId);
     final response = await api.getList(
-      '/api/devices/$normalizedServer/gateway/seen',
+      '/api/devices/$nServer/gateway/seen',
     );
     return response
         .map((item) => Map<String, dynamic>.from(item as Map))

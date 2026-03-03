@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../models/room.dart';
 import '../../models/room_device.dart';
 import '../../state/providers.dart';
@@ -24,12 +26,8 @@ class _RoomsDashboardScreenState extends ConsumerState<RoomsDashboardScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Rooms Dashboard')),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(context.colors),
         ),
         child: homesAsync.when(
           data: (homes) {
@@ -133,7 +131,7 @@ class _RoomRail extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
+        border: Border.all(color: context.colors.cardBorder),
       ),
       child: NavigationRail(
         selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
@@ -204,16 +202,16 @@ class _DevicePanel extends ConsumerWidget {
         children: [
           Text(
             roomName,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF101414),
+              color: context.colors.heading,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             'Devices mapped to this room',
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+            style: TextStyle(color: context.colors.subtitle),
           ),
           const SizedBox(height: 14),
           Expanded(
@@ -257,17 +255,12 @@ class _RoomDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onlineColor = device.isActive
-        ? const Color(0xFF1E9E7A)
-        : const Color(0xFF7A8C8B);
+    final c = context.colors;
+    final onlineColor = device.isActive ? c.online : c.neutral;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.card(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -278,10 +271,7 @@ class _RoomDeviceCard extends StatelessWidget {
                   horizontal: 10,
                   vertical: 5,
                 ),
-                decoration: BoxDecoration(
-                  color: onlineColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
+                decoration: AppDecorations.statusChip(onlineColor),
                 child: Text(
                   device.isActive ? 'Active' : 'Inactive',
                   style: TextStyle(
@@ -304,15 +294,15 @@ class _RoomDeviceCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             device.clientId ?? '-',
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.58)),
+            style: TextStyle(color: c.subtitle),
           ),
           const Spacer(),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F7F7),
-              borderRadius: BorderRadius.circular(12),
+              color: c.surfaceAlt,
+              borderRadius: BorderRadius.circular(kChipRadius),
             ),
             child: Text(
               device.deviceType,

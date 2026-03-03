@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
@@ -14,6 +15,13 @@ class SocketClient {
   Timer? _reconnectTimer;
   bool _shouldReconnect = false;
   String? _token;
+
+  // ── Exponential backoff state ────────────────────────────────────────
+  static const int _baseDelayMs = 2000;
+  static const int _maxDelayMs = 60000;
+  static const double _jitterFactor = 0.25;
+  int _reconnectAttempts = 0;
+  final _random = Random();
 
   final _responseController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -71,6 +79,7 @@ class SocketClient {
     unawaited(
       _channel!.ready
           .then((_) {
+            _reconnectAttempts = 0; // reset backoff on success
             _emitConnection(SocketConnectionState.connected);
           })
           .catchError((_) {}),
@@ -98,7 +107,13 @@ class SocketClient {
     if (_reconnectTimer?.isActive ?? false) {
       return;
     }
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    // Exponential backoff: base × 2^attempt, capped at max, ±25% jitter.
+    final exponential = _baseDelayMs * pow(2, _reconnectAttempts);
+    final capped = min(exponential, _maxDelayMs).toInt();
+    final jitter = (capped * _jitterFactor * (2 * _random.nextDouble() - 1)).round();
+    final delay = Duration(milliseconds: capped + jitter);
+    _reconnectAttempts++;
+    _reconnectTimer = Timer(delay, () {
       if (_shouldReconnect) {
         _connect();
       }

@@ -1,4 +1,11 @@
-class DeviceCommand {
+import 'package:equatable/equatable.dart';
+
+/// Command payload sent via REST to control a device.
+///
+/// Note: [toJson] was intentionally removed — the repository builds the
+/// request body directly using the wire-level key names (`serverID`,
+/// `devID`, etc.).  This class is kept as a typed value object.
+class DeviceCommand extends Equatable {
   final String serverId;
   final String devId;
   final String comp;
@@ -17,15 +24,6 @@ class DeviceCommand {
     this.reqId,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'serverID': serverId,
-      'devID': devId,
-      'comp': comp,
-      'mod': mod,
-      'stat': stat,
-      'val': val,
-      if (reqId != null) 'reqId': reqId,
-    };
-  }
+  @override
+  List<Object?> get props => [serverId, devId, comp, mod, stat, val, reqId];
 }

@@ -1,4 +1,6 @@
-class User {
+import 'package:equatable/equatable.dart';
+
+class User extends Equatable {
   final String emailId;
   final String? deviceId;
 
@@ -14,4 +16,7 @@ class User {
   Map<String, dynamic> toJson() {
     return {'email_id': emailId, 'device_id': deviceId};
   }
+
+  @override
+  List<Object?> get props => [emailId, deviceId];
 }

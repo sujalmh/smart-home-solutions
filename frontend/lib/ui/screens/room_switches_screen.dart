@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../state/providers.dart';
-import 'network_devices_screen.dart';
-import 'switch_screen.dart';
+import '../../utils/id_utils.dart';
 
 class RoomSwitchesScreen extends ConsumerWidget {
   final String serverId;
@@ -13,16 +15,13 @@ class RoomSwitchesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final clientsAsync = ref.watch(clientsProvider(serverId));
+    final c = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Switch Modules')),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(c),
         ),
         child: clientsAsync.when(
           data: (clients) {
@@ -34,12 +33,8 @@ class RoomSwitchesScreen extends ConsumerWidget {
                     const Text('No devices bound yet.'),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              NetworkDevicesScreen(serverId: serverId),
-                        ),
+                      onPressed: () => context.push(
+                        '/devices/$serverId',
                       ),
                       icon: const Icon(Icons.wifi_tethering),
                       label: const Text('Discover devices'),
@@ -56,23 +51,19 @@ class RoomSwitchesScreen extends ConsumerWidget {
                 final client = clients[index];
                 return Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE5ECEB)),
-                  ),
+                  decoration: AppDecorations.section(c),
                   child: Row(
                     children: [
                       Container(
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE7F5F4),
+                          color: c.chipBg,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.toggle_on_outlined,
-                          color: Color(0xFF0F7B7A),
+                          color: c.primary,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -81,7 +72,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Slave ${_displayId(client.clientId)}',
+                              'Slave ${displayId(client.clientId)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
@@ -91,22 +82,16 @@ class RoomSwitchesScreen extends ConsumerWidget {
                             Text(
                               'IP ${client.ip}',
                               style: TextStyle(
-                                color: Colors.black.withValues(alpha: 0.6),
+                                color: c.subtitle,
                               ),
                             ),
                           ],
                         ),
                       ),
                       IconButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SwitchScreen(
-                              serverId: serverId,
-                              clientId: client.clientId,
-                              moduleCount: client.moduleCount,
-                            ),
-                          ),
+                        onPressed: () => context.push(
+                          '/switch/$serverId/${client.clientId}',
+                          extra: {'moduleCount': client.moduleCount},
                         ),
                         icon: const Icon(Icons.chevron_right),
                       ),
@@ -122,11 +107,4 @@ class RoomSwitchesScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

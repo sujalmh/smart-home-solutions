@@ -1,4 +1,6 @@
-class RoomDevice {
+import 'package:equatable/equatable.dart';
+
+class RoomDevice extends Equatable {
   final String deviceId;
   final String roomId;
   final String? serverId;
@@ -28,4 +30,8 @@ class RoomDevice {
       isActive: json['is_active'] as bool,
     );
   }
+
+  @override
+  List<Object?> get props =>
+      [deviceId, roomId, serverId, clientId, name, deviceType, isActive];
 }

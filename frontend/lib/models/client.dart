@@ -1,4 +1,8 @@
-class Client {
+import 'package:equatable/equatable.dart';
+
+class Client extends Equatable {
+  static const int defaultModuleCount = 4;
+
   final String clientId;
   final String serverId;
   final String ip;
@@ -16,7 +20,8 @@ class Client {
       clientId: json['client_id'] as String,
       serverId: json['server_id'] as String,
       ip: json['ip'] as String,
-      moduleCount: (json['module_count'] as num?)?.toInt() ?? 4,
+      moduleCount:
+          (json['module_count'] as num?)?.toInt() ?? defaultModuleCount,
     );
   }
 
@@ -28,4 +33,7 @@ class Client {
       'module_count': moduleCount,
     };
   }
+
+  @override
+  List<Object?> get props => [clientId, serverId, ip, moduleCount];
 }

@@ -123,10 +123,11 @@ class WebSocketManager:
         self._gateway_by_ws: dict[WebSocket, str] = {}
         self._seen: dict[str, dict[str, tuple[str, float]]] = {}
         self._lock = asyncio.Lock()
-        self._seen_ttl = 30.0
+        self._seen_ttl = 180.0
         self._last_update: dict[
             tuple[str, str], tuple[int, int, int, float, str | None]
         ] = {}
+        self.gateway_heartbeats: dict[str, float] = {}
 
     async def add_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -446,6 +447,30 @@ async def _handle_status_request(data: dict) -> None:
     await emit_gateway_status(server_id, dev_id, comp)
 
 
+async def _handle_gateway_heartbeat(data: dict) -> None:
+    """Process periodic heartbeat from an ESP32 master gateway.
+
+    Logs uptime, slave count, command queue depth, and free heap.
+    Updates the gateway's last-seen timestamp on the manager so it
+    can be surfaced by the health API.
+    """
+    server_id = data.get("serverID", "?")
+    uptime_s = data.get("uptime_s", 0)
+    slave_count = data.get("slave_count", 0)
+    queue_depth = data.get("queue_depth", 0)
+    free_heap = data.get("free_heap", 0)
+    logger.info(
+        "gateway_heartbeat server=%s uptime=%ss slaves=%s queue=%s heap=%s",
+        server_id,
+        uptime_s,
+        slave_count,
+        queue_depth,
+        free_heap,
+    )
+    # Store heartbeat timestamp on the manager for liveness checks
+    ws_manager.gateway_heartbeats[server_id] = time.time()
+
+
 async def _handle_message(websocket: WebSocket, message: str) -> None:
     try:
         payload = json.loads(message)
@@ -476,6 +501,8 @@ async def _handle_message(websocket: WebSocket, message: str) -> None:
         await emit_gateway_unbind(data.get("serverID"), data.get("clientID"))
     elif event == "slave_seen":
         await _handle_slave_seen(data)
+    elif event == "gateway_heartbeat":
+        await _handle_gateway_heartbeat(data)
 
 
 def register_websocket_routes(app: FastAPI) -> None:

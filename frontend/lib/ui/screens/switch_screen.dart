@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../data/socket_client.dart';
 import '../../models/switch_module.dart';
 import '../../state/providers.dart';
 import '../../state/switch_modules_controller.dart';
+import '../../utils/id_utils.dart';
 
 class SwitchScreen extends ConsumerStatefulWidget {
   final String serverId;
@@ -33,6 +36,12 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
           .read(switchModulesProvider(widget.clientId).notifier)
           .refreshFromDevice(widget.serverId, silent: true);
     });
+  }
+
+  @override
+  void dispose() {
+    ref.read(socketClientProvider).disconnect();
+    super.dispose();
   }
 
   @override
@@ -69,7 +78,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Switches ${widget.clientId}'),
+        title: Text('Switches ${displayId(widget.clientId)}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -91,12 +100,8 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
         ],
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(context.colors),
         ),
         child: modulesAsync.when(
           data: (modules) {
@@ -244,16 +249,13 @@ class _SwitchCardState extends State<_SwitchCard> {
     final blocked = pending || rateLimited;
     final isAuto = module.mode == 1;
     final isOn = module.status == 1;
-    final accent = isOn ? const Color(0xFF0F7B7A) : const Color(0xFF8E9A9A);
+    final c = context.colors;
+    final accent = isOn ? c.primary : c.neutral;
     final levelLabel = _isDragging ? _dragValue.round() : module.value;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5ECEB)),
-      ),
+      decoration: AppDecorations.section(c),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -279,10 +281,7 @@ class _SwitchCardState extends State<_SwitchCard> {
                     horizontal: 8,
                     vertical: 4,
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF9AB0D7).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                  decoration: AppDecorations.statusChip(c.rateLimitBg),
                   child: const Text(
                     'Input limit',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -294,10 +293,7 @@ class _SwitchCardState extends State<_SwitchCard> {
                     horizontal: 8,
                     vertical: 4,
                   ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2C26A).withValues(alpha: 0.22),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+                  decoration: AppDecorations.statusChip(c.staleBg),
                   child: const Text(
                     'Sync delayed',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),

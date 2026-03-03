@@ -1,4 +1,6 @@
-class AIRoomRef {
+import 'package:equatable/equatable.dart';
+
+class AIRoomRef extends Equatable {
   final String id;
   final String name;
 
@@ -7,9 +9,12 @@ class AIRoomRef {
   factory AIRoomRef.fromJson(Map<String, dynamic> json) {
     return AIRoomRef(id: json['id'] as String, name: json['name'] as String);
   }
+
+  @override
+  List<Object?> get props => [id, name];
 }
 
-class AIDeviceRef {
+class AIDeviceRef extends Equatable {
   final String id;
   final String name;
   final String type;
@@ -23,9 +28,12 @@ class AIDeviceRef {
       type: json['type'] as String,
     );
   }
+
+  @override
+  List<Object?> get props => [id, name, type];
 }
 
-class AIIntent {
+class AIIntent extends Equatable {
   final String action;
   final double confidence;
 
@@ -37,9 +45,12 @@ class AIIntent {
       confidence: (json['confidence'] as num).toDouble(),
     );
   }
+
+  @override
+  List<Object?> get props => [action, confidence];
 }
 
-class AIResolvedEntities {
+class AIResolvedEntities extends Equatable {
   final AIRoomRef? room;
   final List<AIDeviceRef> devices;
   final String action;
@@ -66,9 +77,12 @@ class AIResolvedEntities {
       comp: json['comp'] as String?,
     );
   }
+
+  @override
+  List<Object?> get props => [room, devices, action, value, comp];
 }
 
-class AIExecutionPlan {
+class AIExecutionPlan extends Equatable {
   final String action;
   final AIRoomRef? room;
   final List<AIDeviceRef> devices;
@@ -98,9 +112,12 @@ class AIExecutionPlan {
       source: json['source'] as String,
     );
   }
+
+  @override
+  List<Object?> get props => [action, room, devices, value, comp, source];
 }
 
-class AIToolResult {
+class AIToolResult extends Equatable {
   final String status;
   final bool executed;
   final List<String> reasonCodes;
@@ -128,9 +145,12 @@ class AIToolResult {
       items: parsedItems,
     );
   }
+
+  @override
+  List<Object?> get props => [status, executed, reasonCodes, items];
 }
 
-class AIToolExecutionItem {
+class AIToolExecutionItem extends Equatable {
   final AIDeviceRef device;
   final String status;
   final String detail;
@@ -148,9 +168,12 @@ class AIToolExecutionItem {
       detail: json['detail'] as String,
     );
   }
+
+  @override
+  List<Object?> get props => [device, status, detail];
 }
 
-class AIFinalResponse {
+class AIFinalResponse extends Equatable {
   final String status;
   final String reply;
   final bool requiresClarification;
@@ -187,9 +210,21 @@ class AIFinalResponse {
       result: resultJson == null ? null : AIToolResult.fromJson(resultJson),
     );
   }
+
+  @override
+  List<Object?> get props => [
+        status,
+        reply,
+        requiresClarification,
+        requiresConfirmation,
+        intent,
+        entities,
+        plan,
+        result,
+      ];
 }
 
-class AIChatResponse {
+class AIChatResponse extends Equatable {
   final String conversationId;
   final AIFinalResponse response;
   final DateTime? expiresAt;
@@ -210,4 +245,7 @@ class AIChatResponse {
       expiresAt: expires == null ? null : DateTime.parse(expires),
     );
   }
+
+  @override
+  List<Object?> get props => [conversationId, response, expiresAt];
 }

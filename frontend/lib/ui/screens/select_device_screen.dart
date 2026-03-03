@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../state/providers.dart';
-import 'config_screen.dart';
+import '../../utils/id_utils.dart';
 
 class SelectDeviceScreen extends ConsumerWidget {
-  static const routeName = '/select-device';
-
   const SelectDeviceScreen({super.key});
 
   @override
@@ -51,15 +50,11 @@ class SelectDeviceScreen extends ConsumerWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        title: Text('Gateway ${_displayId(server.serverId)}'),
+                        title: Text('Gateway ${displayId(server.serverId)}'),
                         subtitle: Text('IP ${server.ip}'),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ConfigScreen(deviceId: server.serverId),
-                          ),
+                        onTap: () => context.push(
+                          '/configure/${server.serverId}',
                         ),
                       );
                     },
@@ -75,11 +70,4 @@ class SelectDeviceScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _displayId(String value) {
-  if (value.startsWith('RSW-')) {
-    return value.substring(4);
-  }
-  return value;
 }

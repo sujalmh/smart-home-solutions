@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../config/app_colors.dart';
+import '../../config/app_decorations.dart';
 import '../../state/providers.dart';
 
 class RemoteLoginScreen extends ConsumerStatefulWidget {
-  static const routeName = '/remote-login';
-
   const RemoteLoginScreen({super.key});
 
   @override
@@ -72,16 +72,13 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
+    final c = context.colors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sign In')),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF7F4EE), Color(0xFFE6F1F0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+        decoration: BoxDecoration(
+          gradient: AppDecorations.backgroundGradient(c),
         ),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -95,16 +92,12 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
               const SizedBox(height: 6),
               Text(
                 'Control your home remotely from any network once signed in.',
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
+                style: TextStyle(color: c.subtitle),
               ),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE5ECEB)),
-                ),
+                decoration: AppDecorations.section(c),
                 child: Column(
                   children: [
                     TextField(
@@ -143,7 +136,7 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
                 const SizedBox(height: 12),
                 Text(
                   authState.errorMessage!,
-                  style: const TextStyle(color: Color(0xFF8A3D28)),
+                  style: TextStyle(color: c.error),
                 ),
               ],
             ],

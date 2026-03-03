@@ -1,5 +1,6 @@
 import '../../models/client.dart';
 import '../../models/switch_module.dart';
+import '../../utils/id_utils.dart';
 import '../api_client.dart';
 
 class ClientRepository {
@@ -7,17 +8,10 @@ class ClientRepository {
 
   ClientRepository({required this.api});
 
-  String _normalizeId(String value) {
-    if (value.startsWith('RSW-')) {
-      return value;
-    }
-    return 'RSW-$value';
-  }
-
   Future<List<Client>> listClients({String? serverId}) async {
     final response = await (serverId == null
         ? api.getList('/api/clients')
-        : api.getList('/api/devices/${_normalizeId(serverId)}/bound'));
+        : api.getList('/api/devices/${normalizeId(serverId)}/bound'));
     return response
         .map((item) => Client.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -30,8 +24,8 @@ class ClientRepository {
     required String ip,
   }) async {
     final response = await api.postJson('/api/clients', {
-      'client_id': _normalizeId(clientId),
-      'server_id': _normalizeId(serverId),
+      'client_id': normalizeId(clientId),
+      'server_id': normalizeId(serverId),
       'pwd': password,
       'ip': ip,
     });
@@ -40,7 +34,7 @@ class ClientRepository {
 
   Future<List<SwitchModule>> listModules(String clientId) async {
     final response = await api.getList(
-      '/api/clients/${_normalizeId(clientId)}/modules',
+      '/api/clients/${normalizeId(clientId)}/modules',
     );
     return response
         .map((item) => SwitchModule.fromJson(item as Map<String, dynamic>))
@@ -55,7 +49,7 @@ class ClientRepository {
     required int value,
   }) async {
     final response = await api.putJson(
-      '/api/clients/${_normalizeId(clientId)}/modules/$compId',
+      '/api/clients/${normalizeId(clientId)}/modules/$compId',
       {'mode': mode, 'status': status, 'value': value},
     );
     return SwitchModule.fromJson(response);
