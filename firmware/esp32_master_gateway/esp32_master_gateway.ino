@@ -92,7 +92,7 @@ static const char* WIFI_SSID = "Nuron";
 static const char* WIFI_PASS = "mnbvcx12";
 
 // Backend WebSocket
-static const char* SOCKET_HOST = "api.sms.hebbit.tech";
+static const char* SOCKET_HOST = "smart-home-backend-264081820163.asia-east1.run.app";
 static const uint16_t SOCKET_PORT = 443;
 static const char* SOCKET_PATH = "/ws";
 static const bool   SOCKET_INSECURE = true;
@@ -131,7 +131,7 @@ d0lIKO2d1xozclOzgjXPYovJJIultzkMu34qQb9Sz/yilrbCgj8=
 )EOF";
 
 // Master gateway identity (wire ID without RSW-)
-static const char* SERVER_ID = "0001";
+static const char* SERVER_ID = "0002";
 
 // ─── Network ports ──────────────────────────────────────────────────────────
 static const uint16_t TCP_PORT            = 6000;

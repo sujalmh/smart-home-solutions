@@ -169,11 +169,11 @@ final roomDevicesProvider = FutureProvider.family<List<RoomDevice>, String>((
 
 final gatewayStatusNotifierProvider =
     StateNotifierProvider<GatewayStatusNotifier, Map<String, bool>>((ref) {
-  return GatewayStatusNotifier(
-    deviceRepository: ref.watch(deviceRepositoryProvider),
-    socketClient: ref.watch(socketClientProvider),
-  );
-});
+      return GatewayStatusNotifier(
+        deviceRepository: ref.watch(deviceRepositoryProvider),
+        socketClient: ref.watch(socketClientProvider),
+      );
+    });
 
 /// Sync per-server gateway status derived from [gatewayStatusNotifierProvider].
 /// Returns `null` while a status has not yet been fetched (shows "Checking").

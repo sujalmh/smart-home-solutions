@@ -51,11 +51,15 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     }
   }
 
-  Future<void> _bind(String clientId) async {
+  Future<void> _bind(String clientId, {int channelCount = 4}) async {
     try {
       await ref
           .read(deviceRepositoryProvider)
-          .bindSlave(serverId: widget.serverId, clientId: clientId);
+          .bindSlave(
+            serverId: widget.serverId,
+            clientId: clientId,
+            channelCount: channelCount,
+          );
       ref.invalidate(clientsProvider(widget.serverId));
       await _loadSeen();
     } catch (e) {
@@ -65,6 +69,55 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
         ).showSnackBar(SnackBar(content: Text('Bind failed: $e')));
       }
     }
+  }
+
+  void _showBindSheet(String clientId) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Bind Slave ${displayId(clientId)}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text('How many channels does this device have?'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _bind(clientId, channelCount: 1);
+                    },
+                    child: const Text('1-channel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _bind(clientId, channelCount: 4);
+                    },
+                    child: const Text('4-channel'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _unbind(String clientId) async {
@@ -183,7 +236,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                             subtitle: 'IP ${entry['ip'] ?? '-'}',
                             statusLabel: 'New',
                             onPrimary: () =>
-                                _bind(entry['clientID']?.toString() ?? ''),
+                                _showBindSheet(entry['clientID']?.toString() ?? ''),
                             primaryLabel: 'Bind',
                           ),
                         )
@@ -259,9 +312,7 @@ class _HeaderCard extends StatelessWidget {
     final label = online == null
         ? 'Checking gateway...'
         : (online! ? 'Gateway online' : 'Gateway offline');
-    final color = online == null
-        ? c.neutral
-        : (online! ? c.online : c.offline);
+    final color = online == null ? c.neutral : (online! ? c.online : c.offline);
 
     return Container(
       padding: const EdgeInsets.all(16),

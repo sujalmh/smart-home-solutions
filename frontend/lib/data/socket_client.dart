@@ -37,6 +37,7 @@ class SocketClient {
   Stream<Map<String, dynamic>> get status => _statusController.stream;
   Stream<SocketConnectionState> get connectionState =>
       _connectionController.stream;
+
   /// Emits a map with `{"serverID": String, "online": bool}` whenever a
   /// gateway connects or disconnects from the backend.
   Stream<Map<String, dynamic>> get gatewayStatus =>

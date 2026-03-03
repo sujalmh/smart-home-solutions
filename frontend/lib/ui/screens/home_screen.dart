@@ -48,8 +48,9 @@ class HomeScreen extends ConsumerWidget {
                     // Also immediately re-poll status for already-known servers.
                     final servers = serversAsync.valueOrNull;
                     if (servers != null) {
-                      final notifier =
-                          ref.read(gatewayStatusNotifierProvider.notifier);
+                      final notifier = ref.read(
+                        gatewayStatusNotifierProvider.notifier,
+                      );
                       for (final s in servers) {
                         notifier.refresh(s.serverId);
                       }
@@ -231,10 +232,12 @@ class _GatewayCard extends ConsumerWidget {
     final c = context.colors;
     // bool? — null = not yet fetched ("Checking"), true/false = live status.
     final online = ref.watch(gatewayStatusProvider(server.serverId));
-    final statusLabel =
-        online == null ? 'Checking' : (online ? 'Online' : 'Offline');
-    final statusColor =
-        online == null ? c.neutral : (online ? c.online : c.offline);
+    final statusLabel = online == null
+        ? 'Checking'
+        : (online ? 'Online' : 'Offline');
+    final statusColor = online == null
+        ? c.neutral
+        : (online ? c.online : c.offline);
 
     return Container(
       padding: const EdgeInsets.all(18),

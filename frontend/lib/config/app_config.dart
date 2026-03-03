@@ -1,6 +1,6 @@
 /// Set to `true` to connect to the local backend (192.168.0.109:8000).
 /// Set to `false` to use the production cloud server.
-const bool kUseLocal = false;
+const bool kUseLocal = true;
 
 class AppConfig {
   final String baseUrl;

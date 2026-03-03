@@ -196,6 +196,10 @@ class AIOrchestrator:
                     "intent": Intent(action="status_check", confidence=1.0),
                     "hint": NLUHint(),
                 }
+            # Detect device commands via keywords
+            cmd_result = self._detect_device_command(request.message)
+            if cmd_result is not None:
+                return cmd_result
             return {
                 "intent": Intent(action="conversation", confidence=1.0),
                 "hint": NLUHint(),

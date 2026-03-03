@@ -106,11 +106,13 @@ class DeviceRepository {
   Future<void> bindSlave({
     required String serverId,
     required String clientId,
+    int channelCount = 4,
   }) async {
     final nServer = normalizeId(serverId);
     final nClient = normalizeId(clientId);
     await api.postJson('/api/devices/$nServer/gateway/bind', {
       'client_id': nClient,
+      'channel_count': channelCount,
     });
   }
 

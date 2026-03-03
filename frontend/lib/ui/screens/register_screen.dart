@@ -93,15 +93,16 @@ class _GatewayTile extends ConsumerWidget {
     if (online == null) {
       // Kick off the REST fetch — safe to call in build via the notifier.
       Future.microtask(
-        () => ref
-            .read(gatewayStatusNotifierProvider.notifier)
-            .refresh(serverId),
+        () =>
+            ref.read(gatewayStatusNotifierProvider.notifier).refresh(serverId),
       );
     }
-    final statusLabel =
-        online == null ? 'Checking' : (online ? 'Online' : 'Offline');
-    final statusColor =
-        online == null ? c.neutral : (online ? c.online : c.offline);
+    final statusLabel = online == null
+        ? 'Checking'
+        : (online ? 'Online' : 'Offline');
+    final statusColor = online == null
+        ? c.neutral
+        : (online ? c.online : c.offline);
 
     return Container(
       padding: const EdgeInsets.all(16),

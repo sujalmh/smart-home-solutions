@@ -2,13 +2,12 @@ import asyncio
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.client import Client
-from ..models.device import Device
 from ..models.server import Server
 from ..models.switch_module import SwitchModule
 from ..models.user import User
@@ -58,7 +57,13 @@ def _module_count_from_device_type(device_type: str | None) -> int:
     normalized = device_type.strip().lower()
     if "4ch" in normalized or "4-channel" in normalized or "multi" in normalized:
         return 4
-    if "switch" in normalized:
+    if (
+        "1ch" in normalized
+        or "1-channel" in normalized
+        or "1channel" in normalized
+        or normalized == "switch"
+        or normalized == "single"
+    ):
         return 1
     return 4
 
@@ -72,8 +77,10 @@ async def _get_client_any(session: AsyncSession, client_id: str) -> Client | Non
     return client
 
 
-async def _seed_default_modules(session: AsyncSession, client_id: str) -> None:
-    default_modules = ["Comp0", "Comp1", "Comp2", "Comp3"]
+async def _seed_default_modules(session: AsyncSession, client_id: str, count: int = 4) -> None:
+    all_comps = ["Comp0", "Comp1", "Comp2", "Comp3"]
+    # Only seed the comps needed for this channel count
+    default_modules = all_comps[:max(1, min(count, 4))]
     result = await session.execute(
         select(SwitchModule.comp_id).where(SwitchModule.client_id == client_id)
     )
@@ -335,13 +342,16 @@ async def bound_devices(
         return []
 
     client_ids = [client.client_id for client in clients]
-    device_rows = await session.execute(
-        select(Device.client_id, Device.device_type).where(Device.client_id.in_(client_ids))
+
+    # Derive module_count from the number of seeded SwitchModule rows.
+    # This is reliable: bind always seeds exactly as many comps as the device
+    # channel count, so the row count is the authoritative source of truth.
+    count_rows = await session.execute(
+        select(SwitchModule.client_id, func.count(SwitchModule.comp_id))
+        .where(SwitchModule.client_id.in_(client_ids))
+        .group_by(SwitchModule.client_id)
     )
-    module_counts: dict[str, int] = {}
-    for client_id, device_type in device_rows.all():
-        if client_id not in module_counts:
-            module_counts[client_id] = _module_count_from_device_type(device_type)
+    module_counts: dict[str, int] = {cid: cnt for cid, cnt in count_rows.all()}
 
     return [
         ClientRead.model_validate(
@@ -385,7 +395,7 @@ async def gateway_bind(
         )
         session.add(client)
         await session.flush()
-        await _seed_default_modules(session, normalized_client_id)
+        await _seed_default_modules(session, normalized_client_id, payload.channel_count)
     else:
         # Reject if already bound to a different server
         if client.server_id not in (normalized_server_id, server_id, "", None):

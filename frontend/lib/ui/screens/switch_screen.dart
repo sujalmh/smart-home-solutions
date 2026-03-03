@@ -179,7 +179,8 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     if (modules.isEmpty) {
       return modules;
     }
-    final expected = moduleCount <= 1 ? 1 : 4;
+    // Trust moduleCount exactly: if the device has N channels, show N switches.
+    final expected = moduleCount.clamp(1, modules.length);
     if (expected >= modules.length) {
       return modules;
     }
