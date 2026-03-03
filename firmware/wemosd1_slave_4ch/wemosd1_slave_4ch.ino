@@ -3,8 +3,8 @@
 #include <WiFiUdp.h>
 
 // Wi-Fi credentials
-const char* WIFI_SSID = "Nuron";
-const char* WIFI_PASS = "mnbvcx12";
+const char* WIFI_SSID = "hotspot";
+const char* WIFI_PASS = "notpassword";
 
 // Master TCP target
 const char* MASTER_HOST = "master-gateway.local";
@@ -13,7 +13,7 @@ const uint16_t UDP_DISCOVERY_PORT = 6000;
 const unsigned long DISCOVERY_INTERVAL_MS = 12000;
 
 // Slave identity (wire ID without RSW-)
-const char* SLAVE_ID = "5678";
+const char* SLAVE_ID = "9001";
 
 // Relay pins (active-LOW)
 const uint8_t RELAY_PINS[4] = {D1, D2, D5, D6};

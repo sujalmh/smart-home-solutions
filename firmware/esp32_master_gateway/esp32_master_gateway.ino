@@ -49,7 +49,7 @@ d0lIKO2d1xozclOzgjXPYovJJIultzkMu34qQb9Sz/yilrbCgj8=
 )EOF";
 
 // Master gateway identity (wire ID without RSW-)
-const char* SERVER_ID = "1234";
+const char* SERVER_ID = "0001";
 
 // Legacy ports
 const uint16_t TCP_PORT = 6000;

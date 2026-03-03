@@ -106,6 +106,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                               builder: (_) => SwitchScreen(
                                 serverId: widget.serverId,
                                 clientId: client.clientId,
+                                moduleCount: client.moduleCount,
                               ),
                             ),
                           ),

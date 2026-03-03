@@ -1,0 +1,299 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <WiFiUdp.h>
+
+// Wi-Fi credentials
+const char* WIFI_SSID = "Nuron";
+const char* WIFI_PASS = "mnbvcx12";
+
+// Master TCP target
+const char* MASTER_HOST = "master-gateway.local";
+const uint16_t MASTER_PORT = 6000;
+const uint16_t UDP_DISCOVERY_PORT = 6000;
+const unsigned long DISCOVERY_INTERVAL_MS = 12000;
+
+// Slave identity (wire ID without RSW-)
+const char* SLAVE_ID = "9001";
+
+// Single Relay pin (active-LOW)
+const uint8_t RELAY_PIN = D1;
+
+ESP8266WebServer server(80);
+WiFiUDP udp;
+
+int relayState = 0;
+int relayMode = 0;
+int relayValue = 0;
+String pendingReqId = "";
+
+unsigned long lastRegistrationMs = 0;
+const unsigned long REGISTRATION_INTERVAL_MS = 15000;
+unsigned long lastDiscoveryMs = 0;
+IPAddress masterIp;
+unsigned long lastResolveMs = 0;
+const unsigned long RESOLVE_INTERVAL_MS = 10000;
+
+const unsigned long STATUS_SEND_INTERVAL_MS = 35;
+bool pendingStatus = false;
+unsigned long lastStatusSendMs = 0;
+
+int compToIndex(const String& comp) {
+  if (comp == "Comp0") return 0;
+  return -1;
+}
+
+void applyRelayState(int stat) {
+  relayState = stat ? 1 : 0;
+  digitalWrite(RELAY_PIN, relayState ? LOW : HIGH);
+}
+
+bool resolveMasterIp() {
+  unsigned long now = millis();
+  if (now - lastResolveMs < RESOLVE_INTERVAL_MS && masterIp != IPAddress(0,0,0,0)) {
+    return true;
+  }
+  lastResolveMs = now;
+  IPAddress resolved;
+  if (WiFi.hostByName(MASTER_HOST, resolved)) {
+    masterIp = resolved;
+    Serial.println("Resolved master IP: " + masterIp.toString());
+    return true;
+  }
+  if (masterIp != IPAddress(0,0,0,0)) {
+    Serial.println("Host resolve failed; using discovered master IP: " + masterIp.toString());
+    return true;
+  }
+  Serial.println("Failed to resolve master host.");
+  return false;
+}
+
+void handleUdpAnnouncements() {
+  int packetSize = udp.parsePacket();
+  if (packetSize <= 0) return;
+
+  char buffer[128];
+  int len = udp.read(buffer, sizeof(buffer)-1);
+  if (len <= 0) return;
+  buffer[len] = '\0';
+
+  String line = String(buffer);
+  line.trim();
+  if (!line.startsWith("mrg=")) return;
+
+  String payload = line.substring(4);
+  int sep = payload.indexOf(';');
+  if (sep < 0) return;
+
+  String ipStr = payload.substring(sep+1);
+  IPAddress announcedIp;
+  if (!announcedIp.fromString(ipStr)) return;
+
+  if (masterIp != announcedIp) {
+    masterIp = announcedIp;
+    Serial.println("Discovered master IP via UDP: " + masterIp.toString());
+  }
+}
+
+bool sendLinesToMaster(const String* lines, size_t count) {
+  if (!resolveMasterIp()) return false;
+
+  WiFiClient client;
+  Serial.println("Connecting to master TCP...");
+  if (!client.connect(masterIp, MASTER_PORT)) {
+    Serial.println("Master TCP connect failed.");
+    return false;
+  }
+  Serial.println("Master TCP connected.");
+
+  for (size_t i=0;i<count;i++) {
+    Serial.println("TCP -> " + lines[i]);
+    client.print(lines[i] + "\n");
+  }
+
+  client.flush();
+  client.stop();
+  Serial.println("Master TCP closed.");
+  return true;
+}
+
+void sendUdpDiscovery() {
+  String line = "drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString();
+  udp.beginPacket(IPAddress(255,255,255,255), UDP_DISCOVERY_PORT);
+  udp.write(reinterpret_cast<const uint8_t*>(line.c_str()), line.length());
+  udp.endPacket();
+  Serial.println("UDP -> " + line);
+}
+
+void sendRegistration() {
+  Serial.println("Registering with master...");
+  String lines[2];
+
+  lines[0] = "drg=" + String(SLAVE_ID) + ";" + WiFi.localIP().toString();
+
+  String payload = String(SLAVE_ID) + ";Comp0;" +
+                   String(relayMode) + ";" +
+                   String(relayState) + ";" +
+                   String(relayValue);
+
+  lines[1] = "dst=" + payload;
+
+  if (sendLinesToMaster(lines, 2)) {
+    lastRegistrationMs = millis();
+  }
+}
+
+bool sendStatus() {
+  String payload = String(SLAVE_ID) + ";Comp0;" +
+                   String(relayMode) + ";" +
+                   String(relayState) + ";" +
+                   String(relayValue);
+
+  if (pendingReqId.length() > 0) {
+    payload += ";" + pendingReqId;
+  }
+
+  String line = "sta=" + payload;
+
+  bool sent = sendLinesToMaster(&line, 1);
+  if (sent && pendingReqId.length() > 0) {
+    pendingReqId = "";
+  }
+  return sent;
+}
+
+void enqueueStatus() {
+  pendingStatus = true;
+}
+
+void processPendingStatus() {
+  unsigned long now = millis();
+  if (now - lastStatusSendMs < STATUS_SEND_INTERVAL_MS) return;
+  if (!pendingStatus) return;
+
+  if (sendStatus()) {
+    pendingStatus = false;
+  }
+
+  lastStatusSendMs = now;
+}
+
+void handleCommand() {
+  if (!server.hasArg("usrcmd")) {
+    server.send(400,"text/plain","missing");
+    return;
+  }
+
+  String cmd = server.arg("usrcmd");
+  Serial.println("HTTP usrcmd: " + cmd);
+  cmd.trim();
+  if (!cmd.endsWith(";")) cmd += ";";
+
+  String parts[6];
+  int count=0,start=0;
+  for (int i=0;i<cmd.length() && count<6;i++) {
+    if (cmd[i]==';') {
+      parts[count++] = cmd.substring(start,i);
+      start=i+1;
+    }
+  }
+
+  if (count < 4) {
+    server.send(400,"text/plain","invalid");
+    return;
+  }
+
+  if (parts[0] != String(SLAVE_ID)) {
+    server.send(404,"text/plain","not_for_me");
+    return;
+  }
+
+  if (compToIndex(parts[1]) < 0) {
+    server.send(400,"text/plain","invalid_comp");
+    return;
+  }
+
+  relayMode = parts[2].toInt() > 0 ? 1 : 0;
+  relayValue = parts[4].toInt();
+  int stat = parts[3].toInt() > 0 ? 1 : 0;
+
+  pendingReqId = (count >= 6) ? parts[5] : "";
+
+  applyRelayState(stat);
+  server.send(200,"text/plain","ok");
+  enqueueStatus();
+}
+
+void handleStatusRequest() {
+  if (!server.hasArg("usrini")) {
+    server.send(400,"text/plain","missing");
+    return;
+  }
+
+  String cmd = server.arg("usrini");
+  Serial.println("HTTP usrini: " + cmd);
+
+  if (!cmd.startsWith(String(SLAVE_ID) + ";Comp0")) {
+    server.send(404,"text/plain","not_for_me");
+    return;
+  }
+
+  server.send(200,"text/plain","ok");
+  enqueueStatus();
+}
+
+void ensureRegistration() {
+  if (millis() - lastRegistrationMs >= REGISTRATION_INTERVAL_MS) {
+    Serial.println("Re-registering with master...");
+    sendRegistration();
+  }
+}
+
+void ensureDiscovery() {
+  if (millis() - lastDiscoveryMs >= DISCOVERY_INTERVAL_MS) {
+    sendUdpDiscovery();
+    lastDiscoveryMs = millis();
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Slave booting...");
+
+  pinMode(RELAY_PIN, OUTPUT);
+  applyRelayState(0);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("WiFi connecting...");
+  }
+
+  Serial.println("WiFi connected IP=" + WiFi.localIP().toString());
+
+  udp.begin(UDP_DISCOVERY_PORT);
+  sendUdpDiscovery();
+  lastDiscoveryMs = millis();
+
+  server.on("/", HTTP_GET, []() {
+    if (server.hasArg("usrcmd")) { handleCommand(); return; }
+    if (server.hasArg("usrini")) { handleStatusRequest(); return; }
+    server.send(200,"text/plain","ok");
+  });
+
+  server.onNotFound([]() {
+    Serial.println("HTTP 404: " + server.uri());
+    server.send(404,"text/plain","not_found");
+  });
+
+  server.begin();
+  sendRegistration();
+}
+
+void loop() {
+  server.handleClient();
+  handleUdpAnnouncements();
+  processPendingStatus();
+  ensureRegistration();
+  ensureDiscovery();
+}

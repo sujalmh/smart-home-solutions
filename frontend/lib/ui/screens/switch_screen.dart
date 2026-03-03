@@ -9,11 +9,13 @@ import '../../state/switch_modules_controller.dart';
 class SwitchScreen extends ConsumerStatefulWidget {
   final String serverId;
   final String clientId;
+  final int moduleCount;
 
   const SwitchScreen({
     super.key,
     required this.serverId,
     required this.clientId,
+    this.moduleCount = 4,
   });
 
   @override
@@ -98,15 +100,16 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
         ),
         child: modulesAsync.when(
           data: (modules) {
-            if (modules.isEmpty) {
+            final visibleModules = _visibleModules(modules, widget.moduleCount);
+            if (visibleModules.isEmpty) {
               return const Center(child: Text('No modules available.'));
             }
             return ListView.separated(
               padding: const EdgeInsets.all(18),
-              itemCount: modules.length,
+              itemCount: visibleModules.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, index) {
-                final module = modules[index];
+                final module = visibleModules[index];
                 return _SwitchCard(
                   module: module,
                   pending: controller.isPending(module.compId),
@@ -162,6 +165,32 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
         const SnackBar(content: Text('Device not bound or offline.')),
       );
     }
+  }
+
+  List<SwitchModule> _visibleModules(
+    List<SwitchModule> modules,
+    int moduleCount,
+  ) {
+    if (modules.isEmpty) {
+      return modules;
+    }
+    final expected = moduleCount <= 1 ? 1 : 4;
+    if (expected >= modules.length) {
+      return modules;
+    }
+
+    int compOrder(SwitchModule module) {
+      final raw = module.compId;
+      if (!raw.startsWith('Comp')) {
+        return 999;
+      }
+      final index = int.tryParse(raw.substring(4));
+      return index ?? 999;
+    }
+
+    final sorted = List<SwitchModule>.from(modules)
+      ..sort((a, b) => compOrder(a).compareTo(compOrder(b)));
+    return sorted.take(expected).toList();
   }
 }
 

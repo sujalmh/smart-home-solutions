@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.security import get_current_user
 from ..db.session import get_async_session
 from ..models.client import Client
+from ..models.device import Device
 from ..models.server import Server
 from ..models.switch_module import SwitchModule
 from ..models.user import User
@@ -49,6 +50,17 @@ def _normalize_id(value: str) -> str:
     if value.startswith("RSW-"):
         return value
     return f"RSW-{value}"
+
+
+def _module_count_from_device_type(device_type: str | None) -> int:
+    if not device_type:
+        return 4
+    normalized = device_type.strip().lower()
+    if "4ch" in normalized or "4-channel" in normalized or "multi" in normalized:
+        return 4
+    if "switch" in normalized:
+        return 1
+    return 4
 
 
 async def _get_client_any(session: AsyncSession, client_id: str) -> Client | None:
@@ -322,7 +334,29 @@ async def bound_devices(
         select(Client).where(Client.server_id.in_([normalized_server_id, server_id]))
     )
     clients = list(result.scalars().all())
-    return [ClientRead.model_validate(client) for client in clients]
+    if not clients:
+        return []
+
+    client_ids = [client.client_id for client in clients]
+    device_rows = await session.execute(
+        select(Device.client_id, Device.device_type).where(Device.client_id.in_(client_ids))
+    )
+    module_counts: dict[str, int] = {}
+    for client_id, device_type in device_rows.all():
+        if client_id not in module_counts:
+            module_counts[client_id] = _module_count_from_device_type(device_type)
+
+    return [
+        ClientRead.model_validate(
+            {
+                "client_id": client.client_id,
+                "server_id": client.server_id,
+                "ip": client.ip,
+                "module_count": module_counts.get(client.client_id, 4),
+            }
+        )
+        for client in clients
+    ]
 
 
 @router.post("/{server_id}/gateway/bind", response_model=DeviceConfigResponse)

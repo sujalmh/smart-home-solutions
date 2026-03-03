@@ -14,3 +14,4 @@ class ClientRead(BaseModel):
     client_id: str
     server_id: str
     ip: str
+    module_count: int = 4

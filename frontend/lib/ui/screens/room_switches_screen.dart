@@ -104,6 +104,7 @@ class RoomSwitchesScreen extends ConsumerWidget {
                             builder: (_) => SwitchScreen(
                               serverId: serverId,
                               clientId: client.clientId,
+                              moduleCount: client.moduleCount,
                             ),
                           ),
                         ),
