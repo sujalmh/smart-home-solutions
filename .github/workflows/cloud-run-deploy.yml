@@ -27,6 +27,12 @@ env:
   SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
   RUN_ENV_VARS: ${{ secrets.RUN_ENV_VARS }}
   ALLOW_UNAUTH: ${{ vars.CLOUD_RUN_ALLOW_UNAUTH }}
+  MIN_INSTANCES: ${{ vars.CLOUD_RUN_MIN_INSTANCES }}
+  MAX_INSTANCES: ${{ vars.CLOUD_RUN_MAX_INSTANCES }}
+  CONCURRENCY: ${{ vars.CLOUD_RUN_CONCURRENCY }}
+  REQUEST_TIMEOUT: ${{ vars.CLOUD_RUN_TIMEOUT }}
+  CPU: ${{ vars.CLOUD_RUN_CPU }}
+  MEMORY: ${{ vars.CLOUD_RUN_MEMORY }}
 
 jobs:
   detect-backend-changes:
@@ -110,6 +116,12 @@ jobs:
           SERVICE: ${{ env.SERVICE }}
           RUN_ENV_VARS: ${{ env.RUN_ENV_VARS }}
           ALLOW_UNAUTH: ${{ env.ALLOW_UNAUTH }}
+          MIN_INSTANCES: ${{ env.MIN_INSTANCES }}
+          MAX_INSTANCES: ${{ env.MAX_INSTANCES }}
+          CONCURRENCY: ${{ env.CONCURRENCY }}
+          REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
+          CPU: ${{ env.CPU }}
+          MEMORY: ${{ env.MEMORY }}
         run: |
           set -euo pipefail
           FLAGS=("--project=${PROJECT_ID}" "--region=${REGION}" "--platform=managed")
@@ -117,6 +129,14 @@ jobs:
           if [[ -z "${ALLOW_UNAUTH:-}" || "${ALLOW_UNAUTH,,}" == "true" ]]; then
             FLAGS+=("--allow-unauthenticated")
           fi
+          # Scale defaults for reliability; override via repository variables.
+          FLAGS+=("--min-instances=${MIN_INSTANCES:-1}")
+          FLAGS+=("--max-instances=${MAX_INSTANCES:-20}")
+          FLAGS+=("--concurrency=${CONCURRENCY:-80}")
+          FLAGS+=("--timeout=${REQUEST_TIMEOUT:-120}")
+          FLAGS+=("--cpu=${CPU:-1}")
+          FLAGS+=("--memory=${MEMORY:-512Mi}")
+          FLAGS+=("--cpu-boost")
           if [[ -n "${RUN_ENV_VARS:-}" ]]; then
             FLAGS+=("--update-env-vars=${RUN_ENV_VARS}")
           fi

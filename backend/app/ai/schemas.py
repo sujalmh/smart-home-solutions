@@ -84,6 +84,7 @@ class ToolResult(BaseModel):
     executed: bool
     reason_codes: list[str] = Field(default_factory=list)
     items: list[ToolExecutionItem] = Field(default_factory=list)
+    summary: str | None = None
 
 
 class SafetyDecision(BaseModel):

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models.device import Device
+from ..models.server import Server
+from ..models.switch_module import SwitchModule
 from ..services.device_service import send_device_command
+from ..websocket.server import is_gateway_connected
 from .schemas import DeviceRef, ToolExecutionItem, ToolInput, ToolResult
 
 
@@ -85,6 +90,141 @@ async def execute_device_action_tool(
         executed=True,
         reason_codes=[],
         items=items,
+    )
+
+
+def _status_focus_from_message(message: str) -> set[str]:
+    text = message.lower()
+    focus: set[str] = set()
+    if any(token in text for token in ("gateway", "gateways", "server", "servers", "hub", "hubs")):
+        focus.add("gateways")
+    if any(token in text for token in ("device", "devices", "appliance", "appliances", "client", "clients")):
+        focus.add("devices")
+    if any(token in text for token in ("switch", "switches", "module", "modules", "comp")):
+        focus.add("switches")
+    if not focus:
+        focus = {"devices", "switches", "gateways"}
+    return focus
+
+
+async def execute_status_query_tool(
+    session: AsyncSession,
+    payload: ToolInput,
+    utterance: str,
+) -> ToolResult:
+    plan = payload.plan
+    focus = _status_focus_from_message(utterance)
+    room = plan.room
+
+    gateways_total = int((await session.scalar(select(func.count()).select_from(Server))) or 0)
+    connected_gateways = 0
+    if gateways_total > 0:
+        server_rows = await session.execute(select(Server.server_id))
+        connected_gateways = sum(
+            1 for server_id in server_rows.scalars().all() if is_gateway_connected(server_id)
+        )
+
+    devices_total = int((await session.scalar(select(func.count()).select_from(Device))) or 0)
+    connected_devices = int(
+        (
+            await session.scalar(
+                select(func.count()).select_from(Device).where(
+                    Device.server_id.is_not(None),
+                    Device.client_id.is_not(None),
+                    Device.is_active.is_(True),
+                )
+            )
+        )
+        or 0
+    )
+
+    switches_total = int((await session.scalar(select(func.count()).select_from(SwitchModule))) or 0)
+    switches_on = int(
+        (
+            await session.scalar(
+                select(func.count()).select_from(SwitchModule).where(SwitchModule.status == 1)
+            )
+        )
+        or 0
+    )
+
+    room_devices_total = None
+    room_connected_devices = None
+    room_switches_total = None
+    room_switches_on = None
+    if room is not None:
+        room_devices_total = int(
+            (
+                await session.scalar(
+                    select(func.count()).select_from(Device).where(
+                        Device.room_id == room.id,
+                        Device.is_active.is_(True),
+                    )
+                )
+            )
+            or 0
+        )
+        room_connected_devices = int(
+            (
+                await session.scalar(
+                    select(func.count()).select_from(Device).where(
+                        Device.room_id == room.id,
+                        Device.server_id.is_not(None),
+                        Device.client_id.is_not(None),
+                        Device.is_active.is_(True),
+                    )
+                )
+            )
+            or 0
+        )
+        room_switches_total = int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(SwitchModule)
+                    .join(Device, Device.client_id == SwitchModule.client_id)
+                    .where(Device.room_id == room.id)
+                )
+            )
+            or 0
+        )
+        room_switches_on = int(
+            (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(SwitchModule)
+                    .join(Device, Device.client_id == SwitchModule.client_id)
+                    .where(Device.room_id == room.id, SwitchModule.status == 1)
+                )
+            )
+            or 0
+        )
+
+    parts: list[str] = []
+    if "gateways" in focus:
+        parts.append(f"Gateways: {gateways_total} total, {connected_gateways} connected")
+    if "devices" in focus:
+        if room is not None and room_devices_total is not None and room_connected_devices is not None:
+            parts.append(
+                f"Devices in {room.name}: {room_devices_total} active, {room_connected_devices} connected"
+            )
+        else:
+            parts.append(f"Devices: {devices_total} total, {connected_devices} connected")
+    if "switches" in focus:
+        if room is not None and room_switches_total is not None and room_switches_on is not None:
+            parts.append(
+                f"Switches in {room.name}: {room_switches_total} total, {room_switches_on} on"
+            )
+        else:
+            parts.append(f"Switches: {switches_total} total, {switches_on} on")
+
+    summary = ". ".join(parts) + "."
+    return ToolResult(
+        status="executed",
+        executed=True,
+        reason_codes=[],
+        items=[],
+        summary=summary,
     )
 
 

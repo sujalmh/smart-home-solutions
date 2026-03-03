@@ -32,7 +32,11 @@ from .schemas import (
     ToolInput,
     ToolResult,
 )
-from .tools import execute_device_action_tool, summarize_devices
+from .tools import (
+    execute_device_action_tool,
+    execute_status_query_tool,
+    summarize_devices,
+)
 
 
 class GraphState(TypedDict, total=False):
@@ -115,6 +119,7 @@ class AIOrchestrator:
     async def _nlu(self, state: GraphState) -> GraphState:
         request = state["request"]
         pending_plan = state.get("pending_plan")
+        inventory_query = self._is_inventory_query(request.message)
 
         if request.confirm is False and pending_plan is not None:
             return {
@@ -129,6 +134,11 @@ class AIOrchestrator:
             }
 
         if self._llm is None:
+            if inventory_query:
+                return {
+                    "intent": Intent(action="status_check", confidence=1.0),
+                    "hint": NLUHint(),
+                }
             return {
                 "intent": Intent(action="unknown", confidence=0.0),
                 "hint": NLUHint(),
@@ -146,8 +156,21 @@ class AIOrchestrator:
             result = await extractor.ainvoke(
                 [SystemMessage(content=prompt), HumanMessage(content=request.message)]
             )
+            if inventory_query and (
+                result.intent.action == "unknown"
+                or result.intent.confidence < settings.ai_confidence_threshold
+            ):
+                return {
+                    "intent": Intent(action="status_check", confidence=1.0),
+                    "hint": result.hint,
+                }
             return {"intent": result.intent, "hint": result.hint}
         except Exception:
+            if inventory_query:
+                return {
+                    "intent": Intent(action="status_check", confidence=1.0),
+                    "hint": NLUHint(),
+                }
             return {
                 "intent": Intent(action="unknown", confidence=0.0),
                 "hint": NLUHint(),
@@ -290,7 +313,7 @@ class AIOrchestrator:
                 "decision": SafetyDecision(decision="clarify", reason_codes=["low_confidence"])
             }
 
-        if plan.action in {"turn_on", "turn_off", "set_brightness", "status_check"}:
+        if plan.action in {"turn_on", "turn_off", "set_brightness"}:
             if plan.room is None:
                 return {
                     "decision": SafetyDecision(decision="clarify", reason_codes=["room_required"])
@@ -316,6 +339,7 @@ class AIOrchestrator:
         session = state["session"]
         decision = state["decision"]
         plan = state["plan"]
+        request = state["request"]
 
         if decision.decision != "allow":
             return {
@@ -334,14 +358,9 @@ class AIOrchestrator:
             }
 
         if plan.action == "status_check":
-            return {
-                "tool_result": ToolResult(
-                    status="no_action",
-                    executed=False,
-                    reason_codes=["status_check_not_yet_connected_to_status_tool"],
-                    items=[],
-                )
-            }
+            tool_payload = ToolInput.model_validate({"plan": plan.model_dump()})
+            result = await execute_status_query_tool(session, tool_payload, request.message)
+            return {"tool_result": result}
 
         if plan.action == "schedule_action":
             return {
@@ -411,6 +430,19 @@ class AIOrchestrator:
             return {"final_response": final}
 
         if result.status == "executed":
+            if plan.action == "status_check":
+                final = FinalResponse(
+                    status="executed",
+                    reply=result.summary or "Here is the current system status.",
+                    requires_clarification=False,
+                    requires_confirmation=False,
+                    intent=intent,
+                    entities=entities,
+                    plan=plan,
+                    result=result,
+                )
+                return {"final_response": final}
+
             room_name = plan.room.name if plan.room else "room"
             device_summary = summarize_devices(plan.devices)
             final = FinalResponse(
@@ -495,6 +527,33 @@ class AIOrchestrator:
             return True
         bucket.append(now)
         return False
+
+    def _is_inventory_query(self, message: str) -> bool:
+        text = message.lower()
+        has_count_intent = (
+            "how many" in text
+            or "count" in text
+            or "number of" in text
+            or "total" in text
+        )
+        has_inventory_target = any(
+            token in text
+            for token in (
+                "device",
+                "devices",
+                "gateway",
+                "gateways",
+                "server",
+                "servers",
+                "switch",
+                "switches",
+                "module",
+                "modules",
+                "client",
+                "clients",
+            )
+        )
+        return has_count_intent and has_inventory_target
 
 
 orchestrator = AIOrchestrator()
