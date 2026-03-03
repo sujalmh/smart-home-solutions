@@ -136,7 +136,7 @@ class _Composer extends StatelessWidget {
               minLines: 1,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText: 'Ask to control a room or device',
+                hintText: 'Ask me anything...',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -223,12 +223,12 @@ class _EmptyAssistantState extends StatelessWidget {
             Icon(Icons.smart_toy_outlined, size: 36, color: c.primary),
             SizedBox(height: 10),
             Text(
-              'Structured Assistant Ready',
+              'Smart Home Assistant',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 6),
             Text(
-              'Try: "Turn off living room" or "Set bedroom lamp to 600"',
+              'Ask me anything \u2014 control devices, check status, or just chat!',
               textAlign: TextAlign.center,
             ),
           ],
@@ -268,95 +268,53 @@ class _AssistantBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final response = data.response;
-    final entities = response.entities;
-    final plan = response.plan;
+    final hasToolItems =
+        response.result != null && response.result!.items.isNotEmpty;
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Align(
       alignment: Alignment.centerLeft,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(kButtonRadius),
-          border: Border.all(color: context.colors.composerBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              response.reply,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            _StructuredLine(label: 'Status', value: response.status),
-            _StructuredLine(
-              label: 'Intent',
-              value:
-                  '${response.intent.action} (${response.intent.confidence.toStringAsFixed(2)})',
-            ),
-            _StructuredLine(
-              label: 'Room',
-              value: entities.room == null
-                  ? '-'
-                  : '${entities.room!.name} [${entities.room!.id}]',
-            ),
-            _StructuredLine(
-              label: 'Devices',
-              value: entities.devices.isEmpty
-                  ? '-'
-                  : entities.devices.map((d) => d.name).join(', '),
-            ),
-            if (plan != null)
-              _StructuredLine(
-                label: 'Plan',
-                value:
-                    '${plan.action} / ${plan.comp} / value=${plan.value ?? '-'}',
-              ),
-            if (response.result != null &&
-                response.result!.reasonCodes.isNotEmpty)
-              _StructuredLine(
-                label: 'Reasons',
-                value: response.result!.reasonCodes.join(', '),
-              ),
-            if (response.result != null && response.result!.items.isNotEmpty)
-              _StructuredLine(
-                label: 'Tool Items',
-                value: response.result!.items
-                    .map((item) => '${item.device.name}:${item.status}')
-                    .join(', '),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StructuredLine extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StructuredLine({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text.rich(
-        TextSpan(
-          text: '$label: ',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: context.colors.heading,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: screenWidth * 0.85),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(kButtonRadius),
+            border: Border.all(color: context.colors.composerBorder),
           ),
-          children: [
-            TextSpan(
-              text: value,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SelectableText(
+                response.reply,
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+              if (hasToolItems) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: response.result!.items.map((item) {
+                    final ok = item.status == 'ok';
+                    return Chip(
+                      avatar: Icon(
+                        ok ? Icons.check_circle : Icons.error,
+                        size: 16,
+                        color: ok ? Colors.green : Colors.red,
+                      ),
+                      label: Text(
+                        item.device.name,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

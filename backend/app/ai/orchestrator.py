@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict, deque
 from typing import TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,9 @@ from ..core.config import settings
 from ..models.ai_conversation import AIConversation
 from ..models.device import Device
 from ..models.room import Room
+from ..models.server import Server
+from ..models.switch_module import SwitchModule
+from ..websocket.server import is_gateway_connected
 from .memory import ConversationMemoryService
 from .schemas import (
     AIChatRequest,
@@ -23,6 +27,7 @@ from .schemas import (
     ExecutionPlan,
     FinalResponse,
     Intent,
+    MessageEntry,
     NLUHint,
     NLUResult,
     PersistedState,
@@ -38,6 +43,43 @@ from .tools import (
     summarize_devices,
 )
 
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Intent classification model (lightweight first LLM call)
+# ---------------------------------------------------------------------------
+class _IntentClassification(BaseModel):
+    """Classify user message into one of three categories."""
+    category: str  # "device_command", "status_query", or "conversation"
+    reasoning: str = ""
+
+
+_CLASSIFY_PROMPT = (
+    "You are a smart-home intent classifier. "
+    "Classify the user message into EXACTLY one category:\n"
+    "  device_command  – user wants to turn on/off a device, set brightness, schedule something\n"
+    "  status_query    – user asks about device status, counts, what's online/offline\n"
+    "  conversation    – greeting, open-ended question, chit-chat, anything else\n"
+    "Return the category and brief reasoning."
+)
+
+
+# ---------------------------------------------------------------------------
+# System prompt for conversational replies
+# ---------------------------------------------------------------------------
+_SYSTEM_PROMPT = """You are a friendly and helpful smart-home assistant.
+
+You can control devices (turn on/off, set brightness), check device status,
+and answer general questions about the user's home.
+
+Current home state:
+{home_context}
+
+Keep answers concise, warm, and helpful. When you perform device actions,
+briefly confirm what you did. If you don't know something, say so honestly.
+Do not invent device names or rooms that aren't in the home state above."""
+
 
 class GraphState(TypedDict, total=False):
     session: AsyncSession
@@ -45,6 +87,7 @@ class GraphState(TypedDict, total=False):
     conversation: AIConversation
     persisted_state: PersistedState
     pending_plan: ExecutionPlan | None
+    message_history: list[MessageEntry]
     intent: Intent
     hint: NLUHint
     entities: ResolvedEntities
@@ -65,7 +108,7 @@ class AIOrchestrator:
             llm_kwargs = {
                 "api_key": SecretStr(llm_api_key),
                 "model": settings.openai_model,
-                "temperature": 0,
+                "temperature": 0.7,
             }
             if settings.llm_api_base:
                 llm_kwargs["base_url"] = settings.llm_api_base
@@ -104,23 +147,33 @@ class AIOrchestrator:
             expires_at=conversation.expires_at,
         )
 
+    # ------------------------------------------------------------------
+    # Pipeline nodes
+    # ------------------------------------------------------------------
+
     async def _load_context(self, state: GraphState) -> GraphState:
-        session = state["session"]
-        request = state["request"]
+        session = state.get("session")
+        request = state.get("request")
+        if session is None or request is None:
+            raise ValueError("Missing required graph context for load_context")
         conversation = await self._memory.get_or_create(session, request.conversation_id)
         persisted_state = await self._memory.load_structured_state(conversation)
         pending_plan = await self._memory.get_pending_plan(conversation)
+        message_history = await self._memory.load_message_history(conversation)
         return {
             "conversation": conversation,
             "persisted_state": persisted_state,
             "pending_plan": pending_plan,
+            "message_history": message_history,
         }
 
     async def _nlu(self, state: GraphState) -> GraphState:
-        request = state["request"]
+        request = state.get("request")
+        if request is None:
+            raise ValueError("Missing request in NLU state")
         pending_plan = state.get("pending_plan")
-        inventory_query = self._is_inventory_query(request.message)
 
+        # Handle confirmation flows first (no LLM needed)
         if request.confirm is False and pending_plan is not None:
             return {
                 "intent": Intent(action=pending_plan.action, confidence=1.0),
@@ -133,54 +186,121 @@ class AIOrchestrator:
                 "hint": NLUHint(comp=pending_plan.comp, value=pending_plan.value),
             }
 
+        # Check for inventory queries via keyword matching
+        inventory_query = self._is_inventory_query(request.message)
+
         if self._llm is None:
+            # No LLM available — fall back to keyword heuristics
             if inventory_query:
                 return {
                     "intent": Intent(action="status_check", confidence=1.0),
                     "hint": NLUHint(),
                 }
             return {
-                "intent": Intent(action="unknown", confidence=0.0),
+                "intent": Intent(action="conversation", confidence=1.0),
                 "hint": NLUHint(),
             }
 
-        prompt = (
-            "Extract only structured smart-home command intent and slots. "
-            "Allowed actions: turn_on, turn_off, set_brightness, status_check, schedule_action, unknown. "
-            "Slots: room, device, comp, value, time. "
-            "Return unknown on uncertainty."
-        )
-
+        # --- Two-phase LLM approach ---
+        # Phase 1: Classify intent
         try:
-            extractor = self._llm.with_structured_output(NLUResult)
-            result = await extractor.ainvoke(
-                [SystemMessage(content=prompt), HumanMessage(content=request.message)]
+            classifier = self._llm.with_structured_output(_IntentClassification)
+            classification = await classifier.ainvoke(
+                [SystemMessage(content=_CLASSIFY_PROMPT), HumanMessage(content=request.message)]
             )
-            if inventory_query and (
-                result.intent.action == "unknown"
-                or result.intent.confidence < settings.ai_confidence_threshold
-            ):
+            if isinstance(classification, dict):
+                category = str(classification.get("category", "conversation")).strip().lower()
+            else:
+                category = classification.category.strip().lower()
+        except Exception:
+            logger.warning("Intent classification failed, treating as conversation", exc_info=True)
+            category = "conversation"
+
+        if category == "conversation":
+            return {
+                "intent": Intent(action="conversation", confidence=1.0),
+                "hint": NLUHint(),
+            }
+
+        if category == "status_query" or inventory_query:
+            # Phase 2a: Extract structured slots for status queries
+            try:
+                extractor = self._llm.with_structured_output(NLUResult)
+                result = await extractor.ainvoke(
+                    [
+                        SystemMessage(
+                            content=(
+                                "Extract structured smart-home query intent and slots. "
+                                "Allowed actions: status_check. "
+                                "Slots: room, device. "
+                                "Return status_check with confidence 1.0."
+                            )
+                        ),
+                        HumanMessage(content=request.message),
+                    ]
+                )
+                if isinstance(result, dict):
+                    result = NLUResult.model_validate(result)
                 return {
                     "intent": Intent(action="status_check", confidence=1.0),
                     "hint": result.hint,
                 }
-            return {"intent": result.intent, "hint": result.hint}
-        except Exception:
-            if inventory_query:
+            except Exception:
                 return {
                     "intent": Intent(action="status_check", confidence=1.0),
                     "hint": NLUHint(),
                 }
+
+        # Phase 2b: Extract structured slots for device commands
+        try:
+            extractor = self._llm.with_structured_output(NLUResult)
+            result = await extractor.ainvoke(
+                [
+                    SystemMessage(
+                        content=(
+                            "Extract structured smart-home command intent and slots. "
+                            "Allowed actions: turn_on, turn_off, set_brightness, schedule_action, unknown. "
+                            "Slots: room, device, comp, value, time. "
+                            "Return unknown only if you truly cannot determine the action."
+                        )
+                    ),
+                    HumanMessage(content=request.message),
+                ]
+            )
+            if isinstance(result, dict):
+                result = NLUResult.model_validate(result)
+            # If extraction returns unknown/low-confidence, route to conversation
+            if (
+                result.intent.action == "unknown"
+                or result.intent.confidence < settings.ai_confidence_threshold
+            ):
+                return {
+                    "intent": Intent(action="conversation", confidence=1.0),
+                    "hint": NLUHint(),
+                }
+            return {"intent": result.intent, "hint": result.hint}
+        except Exception:
+            logger.warning("NLU extraction failed, treating as conversation", exc_info=True)
             return {
-                "intent": Intent(action="unknown", confidence=0.0),
+                "intent": Intent(action="conversation", confidence=1.0),
                 "hint": NLUHint(),
             }
 
     async def _resolver(self, state: GraphState) -> GraphState:
-        session = state["session"]
-        intent = state["intent"]
-        hint = state["hint"]
-        persisted = state["persisted_state"]
+        session = state.get("session")
+        intent = state.get("intent")
+        hint = state.get("hint")
+        persisted = state.get("persisted_state")
+        if session is None or intent is None or hint is None or persisted is None:
+            raise ValueError("Missing required state for resolver")
+
+        # Conversation intents don't need entity resolution
+        if intent.action == "conversation":
+            return {
+                "entities": ResolvedEntities(
+                    room=None, devices=[], action="conversation"
+                )
+            }
 
         resolved_room = await self._resolve_room(
             session,
@@ -269,9 +389,11 @@ class AIOrchestrator:
         return []
 
     async def _planner(self, state: GraphState) -> GraphState:
-        request = state["request"]
+        request = state.get("request")
+        entities = state.get("entities")
+        if request is None or entities is None:
+            raise ValueError("Missing required state for planner")
         pending_plan = state.get("pending_plan")
-        entities = state["entities"]
 
         if request.confirm is True and pending_plan is not None:
             return {"plan": pending_plan}
@@ -287,13 +409,15 @@ class AIOrchestrator:
         return {"plan": plan}
 
     async def _safety(self, state: GraphState) -> GraphState:
-        request = state["request"]
-        intent = state["intent"]
-        plan = state["plan"]
+        request = state.get("request")
+        intent = state.get("intent")
+        plan = state.get("plan")
+        if request is None or intent is None or plan is None:
+            raise ValueError("Missing required state for safety")
         pending_plan = state.get("pending_plan")
 
         if self._is_rate_limited(request.conversation_id):
-            return {"decision": SafetyDecision(decision="deny", reason_codes=["rate_limited"]) }
+            return {"decision": SafetyDecision(decision="deny", reason_codes=["rate_limited"])}
 
         if request.confirm is False and pending_plan is not None:
             return {
@@ -308,10 +432,13 @@ class AIOrchestrator:
                 "decision": SafetyDecision(decision="clarify", reason_codes=["no_pending_confirmation"])
             }
 
+        # Conversation intents always pass safety
+        if intent.action == "conversation":
+            return {"decision": SafetyDecision(decision="allow", reason_codes=[])}
+
+        # Unknown / low-confidence → route to conversation instead of dead-end
         if intent.action == "unknown" or intent.confidence < settings.ai_confidence_threshold:
-            return {
-                "decision": SafetyDecision(decision="clarify", reason_codes=["low_confidence"])
-            }
+            return {"decision": SafetyDecision(decision="allow", reason_codes=["low_confidence_conversation"])}
 
         if plan.action in {"turn_on", "turn_off", "set_brightness"}:
             if plan.room is None:
@@ -336,10 +463,23 @@ class AIOrchestrator:
         return {"decision": SafetyDecision(decision="allow", reason_codes=[])}
 
     async def _tool(self, state: GraphState) -> GraphState:
-        session = state["session"]
-        decision = state["decision"]
-        plan = state["plan"]
-        request = state["request"]
+        session = state.get("session")
+        decision = state.get("decision")
+        plan = state.get("plan")
+        request = state.get("request")
+        if session is None or decision is None or plan is None or request is None:
+            raise ValueError("Missing required state for tool")
+
+        # Conversation intents skip tool execution
+        if plan.action == "conversation":
+            return {
+                "tool_result": ToolResult(
+                    status="no_action",
+                    executed=False,
+                    reason_codes=["conversation"],
+                    items=[],
+                )
+            }
 
         if decision.decision != "allow":
             return {
@@ -377,70 +517,44 @@ class AIOrchestrator:
         return {"tool_result": result}
 
     async def _result(self, state: GraphState) -> GraphState:
-        # Explicit node preserved to keep structured stage boundary.
-        return {"tool_result": state["tool_result"]}
+        tool_result = state.get("tool_result")
+        if tool_result is None:
+            raise ValueError("Missing tool_result in result node")
+        return {"tool_result": tool_result}
 
     async def _response(self, state: GraphState) -> GraphState:
-        intent = state["intent"]
-        entities = state["entities"]
-        plan = state["plan"]
-        decision = state["decision"]
-        result = state["tool_result"]
+        session = state.get("session")
+        intent = state.get("intent")
+        entities = state.get("entities")
+        plan = state.get("plan")
+        decision = state.get("decision")
+        result = state.get("tool_result")
+        request = state.get("request")
+        if (
+            session is None
+            or intent is None
+            or entities is None
+            or plan is None
+            or decision is None
+            or result is None
+            or request is None
+        ):
+            raise ValueError("Missing required state for response")
+        message_history = state.get("message_history", [])
 
+        # --- Denied ---
         if decision.decision == "deny":
             reply = "Action denied by safety policy."
             if "confirmation_rejected" in decision.reason_codes:
                 reply = "Okay, I cancelled the pending action."
-            final = FinalResponse(
-                status="denied",
-                reply=reply,
-                requires_clarification=False,
-                requires_confirmation=False,
-                intent=intent,
-                entities=entities,
-                plan=plan,
-                result=result,
+            reply = await self._generate_llm_reply(
+                session, message_history, request.message,
+                context_hint=reply,
             )
-            return {"final_response": final}
-
-        if decision.decision == "clarify":
-            room_hint = entities.room.name if entities.room else None
-            scope = f" in {room_hint}" if room_hint else ""
-            reply = (
-                "I need a bit more detail to continue. "
-                f"You can ask things like: 'How many devices are connected{scope}?', "
-                "'Which switches are on?', or 'Turn off lights in living room'."
-            )
-            final = FinalResponse(
-                status="clarification",
-                reply=reply,
-                requires_clarification=True,
-                requires_confirmation=False,
-                intent=intent,
-                entities=entities,
-                plan=plan,
-                result=result,
-            )
-            return {"final_response": final}
-
-        if decision.decision == "confirm":
-            final = FinalResponse(
-                status="confirmation",
-                reply="Please confirm this action.",
-                requires_clarification=False,
-                requires_confirmation=True,
-                intent=intent,
-                entities=entities,
-                plan=plan,
-                result=result,
-            )
-            return {"final_response": final}
-
-        if result.status == "executed":
-            if plan.action == "status_check":
-                final = FinalResponse(
-                    status="executed",
-                    reply=result.summary or "Here is the current system status.",
+            return {
+                "final_response": FinalResponse(
+                    status="denied",
+                    reply=reply,
                     requires_clarification=False,
                     requires_confirmation=False,
                     intent=intent,
@@ -448,13 +562,120 @@ class AIOrchestrator:
                     plan=plan,
                     result=result,
                 )
-                return {"final_response": final}
+            }
+
+        # --- Clarification ---
+        if decision.decision == "clarify":
+            room_hint = entities.room.name if entities.room else None
+            scope = f" in {room_hint}" if room_hint else ""
+            hint_text = (
+                f"The user needs clarification{scope}. "
+                "Help them rephrase or ask what they'd like to do."
+            )
+            reply = await self._generate_llm_reply(
+                session, message_history, request.message,
+                context_hint=hint_text,
+            )
+            return {
+                "final_response": FinalResponse(
+                    status="clarification",
+                    reply=reply,
+                    requires_clarification=True,
+                    requires_confirmation=False,
+                    intent=intent,
+                    entities=entities,
+                    plan=plan,
+                    result=result,
+                )
+            }
+
+        # --- Confirmation ---
+        if decision.decision == "confirm":
+            reply = await self._generate_llm_reply(
+                session, message_history, request.message,
+                context_hint="Ask the user to confirm this action before proceeding.",
+            )
+            return {
+                "final_response": FinalResponse(
+                    status="confirmation",
+                    reply=reply,
+                    requires_clarification=False,
+                    requires_confirmation=True,
+                    intent=intent,
+                    entities=entities,
+                    plan=plan,
+                    result=result,
+                )
+            }
+
+        # --- Conversation (open-ended / chit-chat) ---
+        if plan.action == "conversation" or "conversation" in result.reason_codes:
+            reply = await self._generate_llm_reply(
+                session, message_history, request.message,
+            )
+            return {
+                "final_response": FinalResponse(
+                    status="executed",
+                    reply=reply,
+                    requires_clarification=False,
+                    requires_confirmation=False,
+                    intent=intent,
+                    entities=entities,
+                    plan=plan,
+                    result=result,
+                )
+            }
+
+        # --- Executed device action ---
+        if result.status == "executed":
+            if plan.action == "status_check":
+                context_hint = result.summary or "Here is the current system status."
+                reply = await self._generate_llm_reply(
+                    session, message_history, request.message,
+                    context_hint=f"Summarise this status info naturally: {context_hint}",
+                )
+                return {
+                    "final_response": FinalResponse(
+                        status="executed",
+                        reply=reply,
+                        requires_clarification=False,
+                        requires_confirmation=False,
+                        intent=intent,
+                        entities=entities,
+                        plan=plan,
+                        result=result,
+                    )
+                }
 
             room_name = plan.room.name if plan.room else "room"
             device_summary = summarize_devices(plan.devices)
-            final = FinalResponse(
-                status="executed",
-                reply=f"Done. Executed {plan.action} in {room_name} for {device_summary}.",
+            context_hint = f"Successfully executed {plan.action} in {room_name} for {device_summary}."
+            reply = await self._generate_llm_reply(
+                session, message_history, request.message,
+                context_hint=context_hint,
+            )
+            return {
+                "final_response": FinalResponse(
+                    status="executed",
+                    reply=reply,
+                    requires_clarification=False,
+                    requires_confirmation=False,
+                    intent=intent,
+                    entities=entities,
+                    plan=plan,
+                    result=result,
+                )
+            }
+
+        # --- Fallback ---
+        reply = await self._generate_llm_reply(
+            session, message_history, request.message,
+            context_hint="No specific action was performed. Let the user know.",
+        )
+        return {
+            "final_response": FinalResponse(
+                status=result.status,
+                reply=reply,
                 requires_clarification=False,
                 requires_confirmation=False,
                 intent=intent,
@@ -462,30 +683,31 @@ class AIOrchestrator:
                 plan=plan,
                 result=result,
             )
-            return {"final_response": final}
-
-        final = FinalResponse(
-            status=result.status,
-            reply="No executable action was performed.",
-            requires_clarification=False,
-            requires_confirmation=False,
-            intent=intent,
-            entities=entities,
-            plan=plan,
-            result=result,
-        )
-        return {"final_response": final}
+        }
 
     async def _persist(self, state: GraphState) -> GraphState:
-        session = state["session"]
-        request = state["request"]
-        conversation = state["conversation"]
-        intent = state["intent"]
-        entities = state["entities"]
-        plan = state["plan"]
-        decision = state["decision"]
-        result = state["tool_result"]
-        final_response = state["final_response"]
+        session = state.get("session")
+        request = state.get("request")
+        conversation = state.get("conversation")
+        intent = state.get("intent")
+        entities = state.get("entities")
+        plan = state.get("plan")
+        decision = state.get("decision")
+        result = state.get("tool_result")
+        final_response = state.get("final_response")
+        if (
+            session is None
+            or request is None
+            or conversation is None
+            or intent is None
+            or entities is None
+            or plan is None
+            or decision is None
+            or result is None
+            or final_response is None
+        ):
+            raise ValueError("Missing required state for persist")
+        message_history = state.get("message_history", [])
 
         persisted_state = PersistedState(
             intent=intent,
@@ -509,6 +731,11 @@ class AIOrchestrator:
             intent=intent.action,
         )
 
+        # Append user + assistant messages to history
+        message_history.append(MessageEntry(role="user", content=request.message))
+        message_history.append(MessageEntry(role="assistant", content=final_response.reply))
+        await self._memory.save_message_history(session, conversation, message_history)
+
         await self._memory.append_audit_log(
             session,
             conversation_id=conversation.conversation_id,
@@ -524,6 +751,106 @@ class AIOrchestrator:
 
         await session.refresh(conversation)
         return {"conversation": conversation}
+
+    # ------------------------------------------------------------------
+    # LLM reply generation
+    # ------------------------------------------------------------------
+
+    async def _generate_llm_reply(
+        self,
+        session: AsyncSession,
+        history: list[MessageEntry],
+        user_message: str,
+        *,
+        context_hint: str | None = None,
+    ) -> str:
+        """Build a conversational LLM reply using home context + history."""
+        if self._llm is None:
+            return self._fallback_reply(context_hint)
+
+        try:
+            home_context = await self._build_home_context(session)
+            system_text = _SYSTEM_PROMPT.format(home_context=home_context)
+            if context_hint:
+                system_text += f"\n\nAdditional context: {context_hint}"
+
+            messages: list = [SystemMessage(content=system_text)]
+
+            # Add recent history (last 10 exchanges)
+            for entry in history[-10:]:
+                if entry.role == "user":
+                    messages.append(HumanMessage(content=entry.content))
+                elif entry.role == "assistant":
+                    messages.append(AIMessage(content=entry.content))
+
+            messages.append(HumanMessage(content=user_message))
+
+            response = await self._llm.ainvoke(messages)
+            text = response.content
+            return text.strip() if isinstance(text, str) else str(text)
+        except Exception:
+            logger.warning("LLM reply generation failed", exc_info=True)
+            return self._fallback_reply(context_hint)
+
+    @staticmethod
+    def _fallback_reply(context_hint: str | None = None) -> str:
+        if context_hint:
+            return context_hint
+        return "I'm here to help with your smart home. What would you like to do?"
+
+    async def _build_home_context(self, session: AsyncSession) -> str:
+        """Query the DB to build a concise summary of the home for the system prompt."""
+        lines: list[str] = []
+
+        try:
+            # Rooms
+            rooms_result = await session.execute(select(Room))
+            rooms = list(rooms_result.scalars().all())
+            if rooms:
+                lines.append(f"Rooms ({len(rooms)}): {', '.join(r.name for r in rooms)}")
+
+            # Gateways / Servers
+            servers_result = await session.execute(select(Server))
+            servers = list(servers_result.scalars().all())
+            for srv in servers:
+                connected = is_gateway_connected(srv.server_id)
+                status = "online" if connected else "offline"
+                lines.append(f"Gateway '{srv.server_id}': {status}")
+
+            # Devices per room
+            for room in rooms:
+                devices_result = await session.execute(
+                    select(Device).where(Device.room_id == room.room_id)
+                )
+                devices = list(devices_result.scalars().all())
+                if devices:
+                    device_names = [f"{d.name} ({d.device_type})" for d in devices]
+                    lines.append(f"  {room.name} devices: {', '.join(device_names)}")
+
+                    # Switch states (through client_id)
+                    for device in devices:
+                        if not device.client_id:
+                            continue
+                        switches_result = await session.execute(
+                            select(SwitchModule).where(
+                                SwitchModule.client_id == device.client_id
+                            )
+                        )
+                        switches = list(switches_result.scalars().all())
+                        for sw in switches:
+                            state_str = "ON" if sw.status else "OFF"
+                            lines.append(
+                                f"    {device.name}/{sw.comp_id}: {state_str} (brightness={sw.value})"
+                            )
+        except Exception:
+            logger.warning("Failed to build home context", exc_info=True)
+            lines.append("(home context unavailable)")
+
+        return "\n".join(lines) if lines else "(no devices configured)"
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     def _is_rate_limited(self, conversation_id: str) -> bool:
         now = time.monotonic()

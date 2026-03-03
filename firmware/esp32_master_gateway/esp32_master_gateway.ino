@@ -131,7 +131,7 @@ d0lIKO2d1xozclOzgjXPYovJJIultzkMu34qQb9Sz/yilrbCgj8=
 )EOF";
 
 // Master gateway identity (wire ID without RSW-)
-static const char* SERVER_ID = "0002";
+static const char* SERVER_ID = "0001";
 
 // ─── Network ports ──────────────────────────────────────────────────────────
 static const uint16_t TCP_PORT            = 6000;

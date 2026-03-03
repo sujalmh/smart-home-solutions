@@ -26,6 +26,12 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
   void initState() {
     super.initState();
     _loadSeen();
+    // Fetch gateway online/offline status for this server on first load.
+    Future.microtask(
+      () => ref
+          .read(gatewayStatusNotifierProvider.notifier)
+          .refresh(widget.serverId),
+    );
   }
 
   Future<void> _loadSeen() async {
@@ -97,7 +103,8 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
   @override
   Widget build(BuildContext context) {
     final boundAsync = ref.watch(clientsProvider(widget.serverId));
-    final statusAsync = ref.watch(gatewayStatusProvider(widget.serverId));
+    // bool? — null = not yet fetched ("Checking")
+    final online = ref.watch(gatewayStatusProvider(widget.serverId));
 
     return Scaffold(
       appBar: AppBar(
@@ -111,7 +118,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            _HeaderCard(serverId: widget.serverId, statusAsync: statusAsync),
+            _HeaderCard(serverId: widget.serverId, online: online),
             const SizedBox(height: 18),
             const _SectionTitle('My devices'),
             const SizedBox(height: 8),
@@ -242,23 +249,19 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
 
 class _HeaderCard extends StatelessWidget {
   final String serverId;
-  final AsyncValue<bool> statusAsync;
+  final bool? online;
 
-  const _HeaderCard({required this.serverId, required this.statusAsync});
+  const _HeaderCard({required this.serverId, required this.online});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final label = statusAsync.when(
-      data: (online) => online ? 'Gateway online' : 'Gateway offline',
-      loading: () => 'Checking gateway...',
-      error: (_, _) => 'Gateway status unknown',
-    );
-    final color = statusAsync.when(
-      data: (online) => online ? c.online : c.offline,
-      loading: () => c.neutral,
-      error: (_, _) => c.neutral,
-    );
+    final label = online == null
+        ? 'Checking gateway...'
+        : (online! ? 'Gateway online' : 'Gateway offline');
+    final color = online == null
+        ? c.neutral
+        : (online! ? c.online : c.offline);
 
     return Container(
       padding: const EdgeInsets.all(16),

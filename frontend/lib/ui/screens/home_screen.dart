@@ -16,6 +16,17 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final serversAsync = ref.watch(serversProvider);
     final c = context.colors;
+
+    // Fetch (or re-fetch) gateway status whenever the server list resolves.
+    ref.listen(serversProvider, (_, next) {
+      next.whenData((servers) {
+        final notifier = ref.read(gatewayStatusNotifierProvider.notifier);
+        for (final s in servers) {
+          notifier.refresh(s.serverId);
+        }
+      });
+    });
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -32,7 +43,18 @@ class HomeScreen extends ConsumerWidget {
                       ref.read(authControllerProvider.notifier).logout(),
                   onAssistant: () => context.push(AppRoutes.assistant),
                   onRooms: () => context.push(AppRoutes.rooms),
-                  onRefresh: () => ref.refresh(serversProvider),
+                  onRefresh: () {
+                    ref.refresh(serversProvider);
+                    // Also immediately re-poll status for already-known servers.
+                    final servers = serversAsync.valueOrNull;
+                    if (servers != null) {
+                      final notifier =
+                          ref.read(gatewayStatusNotifierProvider.notifier);
+                      for (final s in servers) {
+                        notifier.refresh(s.serverId);
+                      }
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -207,17 +229,12 @@ class _GatewayCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    final statusAsync = ref.watch(gatewayStatusProvider(server.serverId));
-    final statusLabel = statusAsync.when(
-      data: (online) => online ? 'Online' : 'Offline',
-      loading: () => 'Checking',
-      error: (_, _) => 'Unknown',
-    );
-    final statusColor = statusAsync.when(
-      data: (online) => online ? c.online : c.offline,
-      loading: () => c.neutral,
-      error: (_, _) => c.neutral,
-    );
+    // bool? — null = not yet fetched ("Checking"), true/false = live status.
+    final online = ref.watch(gatewayStatusProvider(server.serverId));
+    final statusLabel =
+        online == null ? 'Checking' : (online ? 'Online' : 'Offline');
+    final statusColor =
+        online == null ? c.neutral : (online ? c.online : c.offline);
 
     return Container(
       padding: const EdgeInsets.all(18),

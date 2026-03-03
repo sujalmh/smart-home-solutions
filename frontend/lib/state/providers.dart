@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_config.dart';
@@ -20,8 +22,54 @@ import '../models/client.dart';
 import '../models/room.dart';
 import '../models/room_device.dart';
 
+// ─── Gateway Status Notifier ─────────────────────────────────────────────────
+
+/// Maintains a live map of `{ rawServerId → online }` for all known masters.
+///
+/// Status is initialised by calling [refresh] (triggered from [HomeScreen] on
+/// load / manual refresh) and stays up-to-date via `gateway_status_changed`
+/// socket push events emitted by the backend whenever a gateway connects or
+/// disconnects.
+class GatewayStatusNotifier extends StateNotifier<Map<String, bool>> {
+  GatewayStatusNotifier({
+    required this.deviceRepository,
+    required this.socketClient,
+  }) : super({}) {
+    _sub = socketClient.gatewayStatus.listen(_onSocketEvent);
+  }
+
+  final DeviceRepository deviceRepository;
+  final SocketClient socketClient;
+  late final StreamSubscription<Map<String, dynamic>> _sub;
+
+  void _onSocketEvent(Map<String, dynamic> data) {
+    final serverId = data['serverID'];
+    if (serverId is! String || serverId.isEmpty) return;
+    final online = data['online'] == true;
+    state = {...state, serverId: online};
+  }
+
+  /// Fetch the current gateway status for [serverId] from the REST API.
+  Future<void> refresh(String serverId) async {
+    try {
+      final online = await deviceRepository.verifyGateway(serverId: serverId);
+      state = {...state, serverId: online};
+    } catch (_) {
+      // Keep existing state rather than flipping to false on a transient error.
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
+
+// ─── Providers ───────────────────────────────────────────────────────────────
+
 final appConfigProvider = Provider<AppConfig>((ref) {
-  return AppConfig.production();
+  return kUseLocal ? AppConfig.local() : AppConfig.production();
 });
 
 final publicApiClientProvider = Provider<ApiClient>((ref) {
@@ -119,11 +167,18 @@ final roomDevicesProvider = FutureProvider.family<List<RoomDevice>, String>((
   return ref.watch(roomRepositoryProvider).listRoomDevices(roomId);
 });
 
-final gatewayStatusProvider = FutureProvider.family<bool, String>((
-  ref,
-  serverId,
-) async {
-  return ref.watch(deviceRepositoryProvider).verifyGateway(serverId: serverId);
+final gatewayStatusNotifierProvider =
+    StateNotifierProvider<GatewayStatusNotifier, Map<String, bool>>((ref) {
+  return GatewayStatusNotifier(
+    deviceRepository: ref.watch(deviceRepositoryProvider),
+    socketClient: ref.watch(socketClientProvider),
+  );
+});
+
+/// Sync per-server gateway status derived from [gatewayStatusNotifierProvider].
+/// Returns `null` while a status has not yet been fetched (shows "Checking").
+final gatewayStatusProvider = Provider.family<bool?, String>((ref, serverId) {
+  return ref.watch(gatewayStatusNotifierProvider)[serverId];
 });
 
 final switchModulesProvider =

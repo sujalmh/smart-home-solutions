@@ -28,6 +28,8 @@ class SocketClient {
   final _statusController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionController =
       StreamController<SocketConnectionState>.broadcast();
+  final _gatewayStatusController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   SocketClient({required this.url, required this.path});
 
@@ -35,6 +37,10 @@ class SocketClient {
   Stream<Map<String, dynamic>> get status => _statusController.stream;
   Stream<SocketConnectionState> get connectionState =>
       _connectionController.stream;
+  /// Emits a map with `{"serverID": String, "online": bool}` whenever a
+  /// gateway connects or disconnects from the backend.
+  Stream<Map<String, dynamic>> get gatewayStatus =>
+      _gatewayStatusController.stream;
 
   void connect({String? token}) {
     _token = token;
@@ -68,6 +74,7 @@ class SocketClient {
     _responseController.close();
     _statusController.close();
     _connectionController.close();
+    _gatewayStatusController.close();
   }
 
   void _connect() {
@@ -158,6 +165,8 @@ class SocketClient {
       _responseController.add(_asMap(data));
     } else if (event == 'staresult' && data is Map) {
       _statusController.add(_asMap(data));
+    } else if (event == 'gateway_status_changed' && data is Map) {
+      _gatewayStatusController.add(_asMap(data));
     }
   }
 

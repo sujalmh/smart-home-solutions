@@ -1,3 +1,7 @@
+/// Set to `true` to connect to the local backend (192.168.0.109:8000).
+/// Set to `false` to use the production cloud server.
+const bool kUseLocal = false;
+
 class AppConfig {
   final String baseUrl;
   final String socketUrl;
@@ -8,6 +12,14 @@ class AppConfig {
     required this.socketUrl,
     required this.socketPath,
   });
+
+  factory AppConfig.local() {
+    return const AppConfig(
+      baseUrl: 'http://192.168.0.109:8000',
+      socketUrl: 'http://192.168.0.109:8000',
+      socketPath: '/ws',
+    );
+  }
 
   factory AppConfig.production() {
     const baseUrl = String.fromEnvironment(

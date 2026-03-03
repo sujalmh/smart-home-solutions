@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..models.ai_audit_log import AIAuditLog
 from ..models.ai_conversation import AIConversation
-from .schemas import ExecutionPlan, PersistedState
+from .schemas import ExecutionPlan, MessageEntry, PersistedState
+
+_MAX_HISTORY_MESSAGES = 20
 
 
 def _now_utc() -> datetime:
@@ -59,7 +61,28 @@ class ConversationMemoryService:
 
     async def load_structured_state(self, conversation: AIConversation) -> PersistedState:
         raw = conversation.structured_state or {}
-        return PersistedState.model_validate(raw)
+        # Exclude message_history key so PersistedState validates cleanly
+        filtered = {k: v for k, v in raw.items() if k != "message_history"}
+        return PersistedState.model_validate(filtered)
+
+    async def load_message_history(self, conversation: AIConversation) -> list[MessageEntry]:
+        raw = conversation.structured_state or {}
+        entries = raw.get("message_history", [])
+        return [MessageEntry.model_validate(e) for e in entries]
+
+    async def save_message_history(
+        self,
+        session: AsyncSession,
+        conversation: AIConversation,
+        history: list[MessageEntry],
+    ) -> None:
+        trimmed = history[-_MAX_HISTORY_MESSAGES:]
+        blob = conversation.structured_state or {}
+        blob["message_history"] = [m.model_dump(mode="json") for m in trimmed]
+        conversation.structured_state = blob
+        conversation.expires_at = _expires_at()
+        await session.commit()
+        await session.refresh(conversation)
 
     async def persist_structured_state(
         self,
@@ -67,7 +90,12 @@ class ConversationMemoryService:
         conversation: AIConversation,
         state: PersistedState,
     ) -> AIConversation:
-        conversation.structured_state = state.model_dump(mode="json")
+        existing = conversation.structured_state or {}
+        new_blob = state.model_dump(mode="json")
+        # Preserve message_history across persisted-state overwrites
+        if "message_history" in existing:
+            new_blob["message_history"] = existing["message_history"]
+        conversation.structured_state = new_blob
         conversation.expires_at = _expires_at()
         await session.commit()
         await session.refresh(conversation)

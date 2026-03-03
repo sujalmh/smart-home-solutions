@@ -134,20 +134,36 @@ class WebSocketManager:
             self._clients.add(websocket)
 
     async def register_gateway(self, websocket: WebSocket, server_id: str) -> None:
+        is_new_or_replaced = False
         async with self._lock:
             self._clients.discard(websocket)
             existing = self._gateways.get(server_id)
-            if existing and existing != websocket:
-                self._gateway_by_ws.pop(existing, None)
+            if existing is None or existing != websocket:
+                is_new_or_replaced = True
+                if existing and existing != websocket:
+                    self._gateway_by_ws.pop(existing, None)
             self._gateways[server_id] = websocket
             self._gateway_by_ws[websocket] = server_id
+        # Broadcast outside the lock to avoid deadlock
+        if is_new_or_replaced:
+            await self.broadcast(
+                "gateway_status_changed", {"serverID": server_id, "online": True}
+            )
 
     async def remove(self, websocket: WebSocket) -> None:
+        removed_server_id: str | None = None
         async with self._lock:
             self._clients.discard(websocket)
             server_id = self._gateway_by_ws.pop(websocket, None)
             if server_id and self._gateways.get(server_id) == websocket:
                 self._gateways.pop(server_id, None)
+                removed_server_id = server_id
+        # Broadcast outside the lock — only fires for gateway disconnects
+        if removed_server_id:
+            await self.broadcast(
+                "gateway_status_changed",
+                {"serverID": removed_server_id, "online": False},
+            )
 
     async def broadcast(self, event: str, data: dict) -> None:
         message = _build_message(event, data)
@@ -354,19 +370,42 @@ async def _handle_gateway_register(websocket: WebSocket, data: dict) -> None:
 
 
 async def _handle_register(data: dict) -> None:
+    """Called when a slave finishes registering with a master gateway.
+
+    We only update the slave's IP address in the database.  We deliberately
+    do NOT reassign ``server_id`` here — binding is an explicit operation
+    performed via the REST ``gateway_bind`` API.  Allowing the WebSocket
+    path to claim unbound (or cross-bound) clients was the root cause of
+    devices appearing under the wrong master.
+    """
     server_id = data.get("serverID")
     client_id = data.get("clientID") or data.get("devID")
     ip = data.get("ip")
     if not isinstance(server_id, str) or not isinstance(client_id, str):
         return
+
+    normalized_server_id = _normalize_id(server_id)
+
     async with AsyncSessionLocal() as session:
-        server = await _ensure_server(session, server_id)
-        client = await _ensure_client(session, client_id, server_id)
-        if client and isinstance(ip, str) and ip:
+        # Use _get_client (fetch-only) — never auto-create via the WS path
+        client = await _get_client(session, client_id)
+        if client is None:
+            logger.debug(
+                "register ignored: unknown client=%s (not yet bound via API)",
+                client_id,
+            )
+            return
+        # Enforce strict ownership: only update IP for the owning master
+        if client.server_id != normalized_server_id:
+            logger.warning(
+                "register rejected: client=%s bound to server=%s, registering server=%s",
+                client_id,
+                client.server_id,
+                normalized_server_id,
+            )
+            return
+        if isinstance(ip, str) and ip:
             client.ip = ip
-            # Only set server_id if the client is not already bound elsewhere
-            if server and client.server_id in (server.server_id, "", None):
-                client.server_id = server.server_id
             await session.commit()
 
     wire_server_id = _strip_prefix(server_id)

@@ -12,11 +12,18 @@ ActionType = Literal[
     "set_brightness",
     "status_check",
     "schedule_action",
+    "conversation",
     "unknown",
 ]
 
 ExecutionStatus = Literal["executed", "clarification", "confirmation", "denied", "no_action"]
 SafetyDecisionType = Literal["allow", "clarify", "confirm", "deny"]
+
+
+class MessageEntry(BaseModel):
+    """A single message in the conversation history."""
+    role: Literal["user", "assistant", "system"]
+    content: str
 
 
 class RoomRef(BaseModel):
