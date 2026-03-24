@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-background: #0b1326;
+  --color-primary: #00daf3;
+  --color-primary-container: #009fb2;
+  --color-on-primary: #001f27;
+  --color-surface-container-lowest: #0d1528;
+  --color-surface-container-low: #111c35;
+  --color-surface-container: #1a2540;
+  --color-surface-container-high: #202d4a;
+  --color-surface-container-highest: #2a3a5c;
+  --color-on-surface: #dae2fd;
+  --color-on-surface-variant: #c2cbe7;
+  --color-tertiary: #7bd1fa;
+  --color-error: #ffb4ab;
+  --color-outline-variant: #414754;
+  --ease-precision: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-inter), Inter, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Utility: Gradient CTA === */
+.gradient-cta {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-container) 100%);
+  color: var(--color-on-primary);
+  transition: opacity 200ms var(--ease-precision);
+}
+.gradient-cta:hover {
+  opacity: 0.88;
+}
+
+/* === Utility: Glass surface === */
+.glass {
+  background: rgba(26, 37, 64, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* === Utility: Ghost border (accessibility fallback) === */
+.ghost-border {
+  border: 1px solid rgba(65, 71, 84, 0.15);
+}
+
+/* === Utility: Ghost Button === */
+.btn-ghost {
+  border: 1px solid rgba(65, 71, 84, 0.15);
+  color: var(--color-primary);
+  background: transparent;
+  transition: background 200ms var(--ease-precision), border-color 200ms var(--ease-precision);
+}
+.btn-ghost:hover {
+  background: rgba(0, 218, 243, 0.06);
+  border-color: rgba(0, 218, 243, 0.3);
+}
+
+/* === Blueprint SVG glow === */
+.blueprint-glow {
+  filter: drop-shadow(0 0 8px rgba(0, 218, 243, 0.4));
+}
+
+/* === Scrollbar === */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container-highest);
+  border-radius: 3px;
+}
+
+/* === Selection === */
+::selection {
+  background: rgba(0, 218, 243, 0.2);
+  color: var(--color-on-surface);
+}
