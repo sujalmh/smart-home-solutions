@@ -6,7 +6,7 @@ class ClientCreate(BaseModel):
     server_id: str
     pwd: str
     ip: str
-    channel_count: int = 4
+    channel_count: int = 3
 
 
 class ClientRead(BaseModel):
@@ -15,4 +15,4 @@ class ClientRead(BaseModel):
     client_id: str
     server_id: str
     ip: str
-    module_count: int = 4
+    module_count: int = 3

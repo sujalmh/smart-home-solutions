@@ -173,6 +173,7 @@ static const unsigned long STALE_REFRESH_INTERVAL_MS   = 120000;
 static const unsigned long LOOP_WDT_WARN_MS            = 500;
 static const uint8_t       TASK_WDT_TIMEOUT_S          = 10;
 static const uint8_t       BACKOFF_JITTER_PCT          = 25;
+static const uint8_t       SLAVE_COMPONENT_COUNT       = 3;
 
 // ─── Capacity limits ────────────────────────────────────────────────────────
 static const size_t MAX_SLAVES        = 32;
@@ -1089,7 +1090,7 @@ void processStatusFanout() {
   sendStatusToSlave(req.devId, comp);
   req.nextComp++;
 
-  if (req.nextComp >= 4) {
+  if (req.nextComp >= SLAVE_COMPONENT_COUNT) {
     req.active = false;
     req.devId  = "";
     fanoutHead = (fanoutHead + 1) % MAX_FANOUT_QUEUE;

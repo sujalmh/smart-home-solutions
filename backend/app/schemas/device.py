@@ -49,7 +49,7 @@ class DeviceRegisterRequest(BaseModel):
 
 class DeviceBindRequest(BaseModel):
     client_id: str
-    channel_count: int = Field(default=4, ge=1, le=4)
+    channel_count: int = Field(default=3, ge=1, le=4)
 
 
 class DeviceConfigResponse(BaseModel):

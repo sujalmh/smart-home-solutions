@@ -51,7 +51,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     }
   }
 
-  Future<void> _bind(String clientId, {int channelCount = 4}) async {
+  Future<void> _bind(String clientId, {int channelCount = 3}) async {
     try {
       await ref
           .read(deviceRepositoryProvider)
@@ -83,10 +83,7 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
           children: [
             Text(
               'Bind Slave ${displayId(clientId)}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             const Text('How many channels does this device have?'),
@@ -107,9 +104,9 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                   child: FilledButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _bind(clientId, channelCount: 4);
+                      _bind(clientId, channelCount: 3);
                     },
-                    child: const Text('4-channel'),
+                    child: const Text('3-channel'),
                   ),
                 ),
               ],
@@ -235,8 +232,9 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                                 'Slave ${displayId(entry['clientID']?.toString() ?? '')}',
                             subtitle: 'IP ${entry['ip'] ?? '-'}',
                             statusLabel: 'New',
-                            onPrimary: () =>
-                                _showBindSheet(entry['clientID']?.toString() ?? ''),
+                            onPrimary: () => _showBindSheet(
+                              entry['clientID']?.toString() ?? '',
+                            ),
                             primaryLabel: 'Bind',
                           ),
                         )

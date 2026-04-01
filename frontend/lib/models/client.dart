@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 class Client extends Equatable {
-  static const int defaultModuleCount = 4;
+  static const int defaultModuleCount = 3;
 
   final String clientId;
   final String serverId;

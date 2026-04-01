@@ -85,7 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return SwitchScreen(
             serverId: state.pathParameters['serverId']!,
             clientId: state.pathParameters['clientId']!,
-            moduleCount: extra?['moduleCount'] as int? ?? 4,
+            moduleCount: extra?['moduleCount'] as int? ?? 3,
           );
         },
       ),

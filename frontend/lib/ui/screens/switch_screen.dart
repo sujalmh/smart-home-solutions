@@ -18,7 +18,7 @@ class SwitchScreen extends ConsumerStatefulWidget {
     super.key,
     required this.serverId,
     required this.clientId,
-    this.moduleCount = 4,
+    this.moduleCount = 3,
   });
 
   @override
@@ -26,12 +26,48 @@ class SwitchScreen extends ConsumerStatefulWidget {
 }
 
 class _SwitchScreenState extends ConsumerState<SwitchScreen> {
+  late final ProviderSubscription<AsyncValue<SocketConnectionState>>
+  _connectionSubscription;
+  late final ProviderSubscription<AsyncValue<Map<String, dynamic>>>
+  _statusSubscription;
+  late final ProviderSubscription<AsyncValue<Map<String, dynamic>>>
+  _responseSubscription;
+
   @override
   void initState() {
     super.initState();
     final token = ref.read(authControllerProvider).token;
     ref.read(socketClientProvider).connect(token: token);
+    _connectionSubscription = ref.listenManual(socketConnectionProvider, (
+      _,
+      next,
+    ) {
+      next.whenData((connection) {
+        if (connection == SocketConnectionState.connected) {
+          ref
+              .read(switchModulesProvider(widget.clientId).notifier)
+              .refreshFromDevice(widget.serverId, silent: true);
+        }
+      });
+    }, fireImmediately: true);
+    _statusSubscription = ref.listenManual(socketStatusProvider, (_, next) {
+      next.whenData((data) {
+        ref
+            .read(switchModulesProvider(widget.clientId).notifier)
+            .applySocketUpdate(data);
+      });
+    });
+    _responseSubscription = ref.listenManual(socketResponseProvider, (_, next) {
+      next.whenData((data) {
+        ref
+            .read(switchModulesProvider(widget.clientId).notifier)
+            .applySocketUpdate(data);
+      });
+    });
     Future.microtask(() {
+      if (!mounted) {
+        return;
+      }
       ref
           .read(switchModulesProvider(widget.clientId).notifier)
           .refreshFromDevice(widget.serverId, silent: true);
@@ -40,37 +76,15 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
 
   @override
   void dispose() {
+    _connectionSubscription.close();
+    _statusSubscription.close();
+    _responseSubscription.close();
     ref.read(socketClientProvider).disconnect();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(socketConnectionProvider, (_, next) {
-      next.whenData((connection) {
-        if (connection == SocketConnectionState.connected) {
-          ref
-              .read(switchModulesProvider(widget.clientId).notifier)
-              .refreshFromDevice(widget.serverId, silent: true);
-        }
-      });
-    });
-
-    ref.listen(socketStatusProvider, (_, next) {
-      next.whenData((data) {
-        ref
-            .read(switchModulesProvider(widget.clientId).notifier)
-            .applySocketUpdate(data);
-      });
-    });
-    ref.listen(socketResponseProvider, (_, next) {
-      next.whenData((data) {
-        ref
-            .read(switchModulesProvider(widget.clientId).notifier)
-            .applySocketUpdate(data);
-      });
-    });
-
     final modulesAsync = ref.watch(switchModulesProvider(widget.clientId));
     final controller = ref.read(
       switchModulesProvider(widget.clientId).notifier,
@@ -179,11 +193,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     if (modules.isEmpty) {
       return modules;
     }
-    // Trust moduleCount exactly: if the device has N channels, show N switches.
-    final expected = moduleCount.clamp(1, modules.length);
-    if (expected >= modules.length) {
-      return modules;
-    }
+    final expected = moduleCount <= 0 ? modules.length : moduleCount;
 
     int compOrder(SwitchModule module) {
       final raw = module.compId;
@@ -196,6 +206,9 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
 
     final sorted = List<SwitchModule>.from(modules)
       ..sort((a, b) => compOrder(a).compareTo(compOrder(b)));
+    if (expected >= sorted.length) {
+      return sorted;
+    }
     return sorted.take(expected).toList();
   }
 }
@@ -253,6 +266,7 @@ class _SwitchCardState extends State<_SwitchCard> {
     final c = context.colors;
     final accent = isOn ? c.primary : c.neutral;
     final levelLabel = _isDragging ? _dragValue.round() : module.value;
+    final isDimmable = _isDimmableComp(module.compId);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -264,7 +278,7 @@ class _SwitchCardState extends State<_SwitchCard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                module.compId,
+                _compLabel(module.compId),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -333,35 +347,54 @@ class _SwitchCardState extends State<_SwitchCard> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Level $levelLabel',
-            style: TextStyle(fontWeight: FontWeight.w600, color: accent),
-          ),
-          Slider(
-            min: 0,
-            max: 1000,
-            value: _dragValue,
-            onChanged: blocked
-                ? null
-                : (value) {
-                    setState(() {
-                      _isDragging = true;
-                      _dragValue = value;
-                    });
-                  },
-            onChangeEnd: blocked
-                ? null
-                : (value) {
-                    setState(() {
-                      _isDragging = false;
-                      _dragValue = value;
-                    });
-                    widget.onValueCommitted(value.round());
-                  },
-          ),
+          if (isDimmable) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Level $levelLabel',
+              style: TextStyle(fontWeight: FontWeight.w600, color: accent),
+            ),
+            Slider(
+              min: 0,
+              max: 1000,
+              value: _dragValue,
+              onChanged: blocked
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _isDragging = true;
+                        _dragValue = value;
+                      });
+                    },
+              onChangeEnd: blocked
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _isDragging = false;
+                        _dragValue = value;
+                      });
+                      widget.onValueCommitted(value.round());
+                    },
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  bool _isDimmableComp(String compId) {
+    return compId == 'Comp0' || compId == 'Comp1';
+  }
+
+  String _compLabel(String compId) {
+    switch (compId) {
+      case 'Comp0':
+        return 'Fan (Comp0)';
+      case 'Comp1':
+        return 'Dim Light (Comp1)';
+      case 'Comp2':
+        return 'On/Off Light (Comp2)';
+      default:
+        return compId;
+    }
   }
 }

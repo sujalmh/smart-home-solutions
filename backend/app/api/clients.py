@@ -26,10 +26,6 @@ def _alt_id(value: str) -> str | None:
     return None
 
 
-# _module_count_from_device_type removed – module count is now derived
-# from the actual SwitchModule rows seeded during bind.
-
-
 @router.get("", response_model=list[ClientRead])
 async def list_clients(
     server_id: str | None = Query(default=None),
@@ -63,7 +59,7 @@ async def list_clients(
                 "client_id": client.client_id,
                 "server_id": client.server_id,
                 "ip": client.ip,
-                "module_count": module_counts.get(client.client_id, 4),
+                "module_count": module_counts.get(client.client_id, 3),
             }
         )
         for client in clients

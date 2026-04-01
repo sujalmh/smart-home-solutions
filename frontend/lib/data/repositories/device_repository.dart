@@ -106,7 +106,7 @@ class DeviceRepository {
   Future<void> bindSlave({
     required String serverId,
     required String clientId,
-    int channelCount = 4,
+    int channelCount = 3,
   }) async {
     final nServer = normalizeId(serverId);
     final nClient = normalizeId(clientId);

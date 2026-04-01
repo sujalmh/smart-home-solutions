@@ -51,23 +51,6 @@ def _normalize_id(value: str) -> str:
     return f"RSW-{value}"
 
 
-def _module_count_from_device_type(device_type: str | None) -> int:
-    if not device_type:
-        return 4
-    normalized = device_type.strip().lower()
-    if "4ch" in normalized or "4-channel" in normalized or "multi" in normalized:
-        return 4
-    if (
-        "1ch" in normalized
-        or "1-channel" in normalized
-        or "1channel" in normalized
-        or normalized == "switch"
-        or normalized == "single"
-    ):
-        return 1
-    return 4
-
-
 async def _get_client_any(session: AsyncSession, client_id: str) -> Client | None:
     normalized = _normalize_id(client_id)
     raw = client_id[4:] if client_id.startswith("RSW-") else client_id
@@ -77,10 +60,11 @@ async def _get_client_any(session: AsyncSession, client_id: str) -> Client | Non
     return client
 
 
-async def _seed_default_modules(session: AsyncSession, client_id: str, count: int = 4) -> None:
+async def _seed_default_modules(
+    session: AsyncSession, client_id: str, count: int = 3
+) -> None:
     all_comps = ["Comp0", "Comp1", "Comp2", "Comp3"]
-    # Only seed the comps needed for this channel count
-    default_modules = all_comps[:max(1, min(count, 4))]
+    default_modules = all_comps[: max(1, min(count, 4))]
     result = await session.execute(
         select(SwitchModule.comp_id).where(SwitchModule.client_id == client_id)
     )
@@ -119,14 +103,20 @@ async def device_command(
 
     client = await _get_client_any(session, payload.dev_id)
     if client is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found"
+        )
     normalized_dev_id = _normalize_id(payload.dev_id)
 
     if client.server_id not in {normalized_server_id, server_id}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="device_unbound")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="device_unbound"
+        )
 
     if not is_gateway_connected(normalized_server_id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+        )
 
     delivered = await emit_gateway_command(
         normalized_server_id,
@@ -138,7 +128,9 @@ async def device_command(
         payload.req_id,
     )
     if not delivered:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="gateway_offline")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="gateway_offline"
+        )
     return DeviceCommandResponse.model_validate(
         {
             "serverID": normalized_server_id,
@@ -172,7 +164,9 @@ async def device_status(
 
     client = await _get_client_any(session, payload.dev_id)
     if client is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="client_not_found"
+        )
     normalized_dev_id = _normalize_id(payload.dev_id)
 
     if payload.refresh:
@@ -246,7 +240,9 @@ async def config_remote(
     normalized_server_id = _normalize_id(server_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found"
+        )
     return DeviceConfigResponse(status="ok")
 
 
@@ -261,7 +257,9 @@ async def config_client(
     normalized_client_id = _normalize_id(payload.client_id)
     server = await session.get(Server, normalized_server_id)
     if server is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="server_not_found"
+        )
 
     existing = await session.get(Client, normalized_client_id)
     if existing is None:
@@ -342,10 +340,6 @@ async def bound_devices(
         return []
 
     client_ids = [client.client_id for client in clients]
-
-    # Derive module_count from the number of seeded SwitchModule rows.
-    # This is reliable: bind always seeds exactly as many comps as the device
-    # channel count, so the row count is the authoritative source of truth.
     count_rows = await session.execute(
         select(SwitchModule.client_id, func.count(SwitchModule.comp_id))
         .where(SwitchModule.client_id.in_(client_ids))
@@ -359,7 +353,7 @@ async def bound_devices(
                 "client_id": client.client_id,
                 "server_id": client.server_id,
                 "ip": client.ip,
-                "module_count": module_counts.get(client.client_id, 4),
+                "module_count": module_counts.get(client.client_id, 3),
             }
         )
         for client in clients
@@ -440,6 +434,8 @@ async def gateway_unbind(
     await session.execute(
         delete(SwitchModule).where(SwitchModule.client_id == normalized_client_id)
     )
-    await session.execute(delete(Client).where(Client.client_id == normalized_client_id))
+    await session.execute(
+        delete(Client).where(Client.client_id == normalized_client_id)
+    )
     await session.commit()
     return DeviceConfigResponse(status="ok")
