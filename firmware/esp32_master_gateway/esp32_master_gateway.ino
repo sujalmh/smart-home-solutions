@@ -88,8 +88,8 @@
 // ═════════════════════════════════════════════════════════════════════════════
 
 // WiFi credentials
-static const char* WIFI_SSID = "SMART";
-static const char* WIFI_PASS = "localhost";
+static const char* WIFI_SSID = "NAIN";
+static const char* WIFI_PASS = "Welcome2IIITB";
 
 // Backend WebSocket
 static const char* SOCKET_HOST = "smart-home-backend-264081820163.asia-east1.run.app";

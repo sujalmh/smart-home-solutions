@@ -31,10 +31,10 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
       return;
     }
 
-    await ref
-        .read(authControllerProvider.notifier)
-        .login(emailId: email, password: password);
+    final notifier = ref.read(authControllerProvider.notifier);
+    await notifier.login(emailId: email, password: password);
 
+    if (!mounted) return;
     final state = ref.read(authControllerProvider);
     if (state.errorMessage == null) {
       return;
@@ -51,10 +51,10 @@ class _RemoteLoginScreenState extends ConsumerState<RemoteLoginScreen> {
       return;
     }
 
-    await ref
-        .read(authControllerProvider.notifier)
-        .register(emailId: email, password: password);
+    final notifier = ref.read(authControllerProvider.notifier);
+    await notifier.register(emailId: email, password: password);
 
+    if (!mounted) return;
     final state = ref.read(authControllerProvider);
     if (state.errorMessage == null) {
       _showMessage('Registered and logged in.');

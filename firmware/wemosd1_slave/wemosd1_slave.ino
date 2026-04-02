@@ -18,11 +18,11 @@
 #endif
 
 #ifndef WIFI_SSID_CFG
-#define WIFI_SSID_CFG "SMART"
+#define WIFI_SSID_CFG "NAIN"
 #endif
 
 #ifndef WIFI_PASS_CFG
-#define WIFI_PASS_CFG "localhost"
+#define WIFI_PASS_CFG "Welcome2IIITB"
 #endif
 
 // MCP23017 pin aliases (legacy reference)

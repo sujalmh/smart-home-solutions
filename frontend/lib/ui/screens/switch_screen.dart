@@ -32,12 +32,14 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
   _statusSubscription;
   late final ProviderSubscription<AsyncValue<Map<String, dynamic>>>
   _responseSubscription;
+  late final SocketClient _socketClient;
 
   @override
   void initState() {
     super.initState();
+    _socketClient = ref.read(socketClientProvider);
     final token = ref.read(authControllerProvider).token;
-    ref.read(socketClientProvider).connect(token: token);
+    _socketClient.connect(token: token);
     _connectionSubscription = ref.listenManual(
       socketConnectionProvider,
       (_, next) {
@@ -83,7 +85,7 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     _connectionSubscription.close();
     _statusSubscription.close();
     _responseSubscription.close();
-    ref.read(socketClientProvider).disconnect();
+    _socketClient.disconnect();
     super.dispose();
   }
 

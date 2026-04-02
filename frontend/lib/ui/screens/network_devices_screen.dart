@@ -27,11 +27,21 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
     super.initState();
     _loadSeen();
     // Fetch gateway online/offline status for this server on first load.
-    Future.microtask(
-      () => ref
+    Future.microtask(() {
+      if (!mounted) return;
+      ref
           .read(gatewayStatusNotifierProvider.notifier)
-          .refresh(widget.serverId),
-    );
+          .refresh(widget.serverId);
+    });
+    // Seed slave health from the bound-clients API response whenever it loads.
+    ref.listenManual(clientsProvider(widget.serverId), (_, next) {
+      next.whenData((clients) {
+        if (!mounted) return;
+        ref
+            .read(slaveStatusNotifierProvider.notifier)
+            .seedFromClients(clients);
+      });
+    }, fireImmediately: true);
   }
 
   Future<void> _loadSeen() async {
@@ -43,11 +53,13 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
       final seen = await ref
           .read(deviceRepositoryProvider)
           .listSeenSlaves(serverId: widget.serverId);
+      if (!mounted) return;
       setState(() => _seen = seen);
     } catch (error) {
+      if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -177,12 +189,6 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                 if (clients.isEmpty) {
                   return const _EmptySection(message: 'No devices bound yet.');
                 }
-                // Seed slave status from API response for initial load
-                Future.microtask(
-                  () => ref
-                      .read(slaveStatusNotifierProvider.notifier)
-                      .seedFromClients(clients),
-                );
                 return Column(
                   children: clients
                       .map(
