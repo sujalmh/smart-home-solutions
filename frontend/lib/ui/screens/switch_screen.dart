@@ -18,7 +18,7 @@ class SwitchScreen extends ConsumerStatefulWidget {
     super.key,
     required this.serverId,
     required this.clientId,
-    this.moduleCount = 3,
+    this.moduleCount = 4,
   });
 
   @override
@@ -38,18 +38,19 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     super.initState();
     final token = ref.read(authControllerProvider).token;
     ref.read(socketClientProvider).connect(token: token);
-    _connectionSubscription = ref.listenManual(socketConnectionProvider, (
-      _,
-      next,
-    ) {
-      next.whenData((connection) {
-        if (connection == SocketConnectionState.connected) {
-          ref
-              .read(switchModulesProvider(widget.clientId).notifier)
-              .refreshFromDevice(widget.serverId, silent: true);
-        }
-      });
-    }, fireImmediately: true);
+    _connectionSubscription = ref.listenManual(
+      socketConnectionProvider,
+      (_, next) {
+        next.whenData((connection) {
+          if (connection == SocketConnectionState.connected) {
+            ref
+                .read(switchModulesProvider(widget.clientId).notifier)
+                .refreshFromDevice(widget.serverId, silent: true);
+          }
+        });
+      },
+      fireImmediately: true,
+    );
     _statusSubscription = ref.listenManual(socketStatusProvider, (_, next) {
       next.whenData((data) {
         ref
@@ -57,13 +58,16 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
             .applySocketUpdate(data);
       });
     });
-    _responseSubscription = ref.listenManual(socketResponseProvider, (_, next) {
-      next.whenData((data) {
-        ref
-            .read(switchModulesProvider(widget.clientId).notifier)
-            .applySocketUpdate(data);
-      });
-    });
+    _responseSubscription = ref.listenManual(
+      socketResponseProvider,
+      (_, next) {
+        next.whenData((data) {
+          ref
+              .read(switchModulesProvider(widget.clientId).notifier)
+              .applySocketUpdate(data);
+        });
+      },
+    );
     Future.microtask(() {
       if (!mounted) {
         return;
@@ -193,7 +197,10 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
     if (modules.isEmpty) {
       return modules;
     }
-    final expected = moduleCount <= 0 ? modules.length : moduleCount;
+    final expected = moduleCount <= 1 ? 1 : 4;
+    if (expected >= modules.length) {
+      return modules;
+    }
 
     int compOrder(SwitchModule module) {
       final raw = module.compId;
@@ -206,9 +213,6 @@ class _SwitchScreenState extends ConsumerState<SwitchScreen> {
 
     final sorted = List<SwitchModule>.from(modules)
       ..sort((a, b) => compOrder(a).compareTo(compOrder(b)));
-    if (expected >= sorted.length) {
-      return sorted;
-    }
     return sorted.take(expected).toList();
   }
 }
@@ -266,7 +270,6 @@ class _SwitchCardState extends State<_SwitchCard> {
     final c = context.colors;
     final accent = isOn ? c.primary : c.neutral;
     final levelLabel = _isDragging ? _dragValue.round() : module.value;
-    final isDimmable = _isDimmableComp(module.compId);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -278,7 +281,7 @@ class _SwitchCardState extends State<_SwitchCard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _compLabel(module.compId),
+                module.compId,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -347,54 +350,35 @@ class _SwitchCardState extends State<_SwitchCard> {
               ),
             ],
           ),
-          if (isDimmable) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Level $levelLabel',
-              style: TextStyle(fontWeight: FontWeight.w600, color: accent),
-            ),
-            Slider(
-              min: 0,
-              max: 1000,
-              value: _dragValue,
-              onChanged: blocked
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _isDragging = true;
-                        _dragValue = value;
-                      });
-                    },
-              onChangeEnd: blocked
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _isDragging = false;
-                        _dragValue = value;
-                      });
-                      widget.onValueCommitted(value.round());
-                    },
-            ),
-          ],
+          const SizedBox(height: 12),
+          Text(
+            'Level $levelLabel',
+            style: TextStyle(fontWeight: FontWeight.w600, color: accent),
+          ),
+          Slider(
+            min: 0,
+            max: 1000,
+            value: _dragValue,
+            onChanged: blocked
+                ? null
+                : (value) {
+                    setState(() {
+                      _isDragging = true;
+                      _dragValue = value;
+                    });
+                  },
+            onChangeEnd: blocked
+                ? null
+                : (value) {
+                    setState(() {
+                      _isDragging = false;
+                      _dragValue = value;
+                    });
+                    widget.onValueCommitted(value.round());
+                  },
+          ),
         ],
       ),
     );
-  }
-
-  bool _isDimmableComp(String compId) {
-    return compId == 'Comp0' || compId == 'Comp1';
-  }
-
-  String _compLabel(String compId) {
-    switch (compId) {
-      case 'Comp0':
-        return 'Fan (Comp0)';
-      case 'Comp1':
-        return 'Dim Light (Comp1)';
-      case 'Comp2':
-        return 'On/Off Light (Comp2)';
-      default:
-        return compId;
-    }
   }
 }
