@@ -58,7 +58,9 @@ static const unsigned long STATUS_SEND_INTERVAL_MS = 35;
 static const unsigned long WIFI_RECONNECT_INTERVAL_MS = 5000;
 static const unsigned long TCP_CONNECT_TIMEOUT_MS = 800;
 static const unsigned long LOOP_WDT_WARN_MS = 2000;
+static const unsigned long SWITCH_DEBOUNCE_MS = 50;
 
+static const uint8_t I2C_INIT_MAX_RETRIES = 3;
 static const uint8_t WIFI_MAX_FAILURES = 5;
 static const uint8_t STALE_DISC_FAILURES_RESET = 3;
 static const uint8_t BACKOFF_JITTER_PCT = 25;
@@ -108,11 +110,14 @@ unsigned long lastStatusSendMs = 0;
 
 int switchPos[NUM_CHANNELS];
 bool switchToggled[NUM_CHANNELS];
+unsigned long lastToggleMs[NUM_CHANNELS];
 int lastAnalogLevel = 0;
+
+bool mcpReady = false;
+bool dacReady = false;
 
 SlaveState currentState = STATE_DISCONNECTED;
 IPAddress masterIp;
-bool masterLinked = false;
 unsigned long lastMasterContactMs = 0;
 unsigned long lastRegistrationMs = 0;
 unsigned long lastDiscoveryMs = 0;
@@ -201,11 +206,19 @@ uint16_t levelToMilliVolts(int index, int level) {
 }
 
 MCP4728_channel_t toDacChannel(uint8_t channel) {
-  return channel == 0 ? MCP4728_CHANNEL_A : MCP4728_CHANNEL_B;
+  switch (channel) {
+    case 0:  return MCP4728_CHANNEL_A;
+    case 1:  return MCP4728_CHANNEL_B;
+    case 2:  return MCP4728_CHANNEL_C;
+    default: return MCP4728_CHANNEL_D;
+  }
 }
 
 void applyChannelOutput(int index) {
   if (index < 0 || index >= NUM_CHANNELS) {
+    return;
+  }
+  if (!mcpReady) {
     return;
   }
 
@@ -216,14 +229,17 @@ void applyChannelOutput(int index) {
         relayValue[index] = readClampedAnalogLevel();
       }
       uint16_t vtg = levelToMilliVolts(index, relayValue[index]);
-      dac.setChannelValue(toDacChannel(cfg.dacChannel), vtg);
-      delay(5);
+      if (dacReady) {
+        dac.setChannelValue(toDacChannel(cfg.dacChannel), vtg);
+      }
       mcp.digitalWrite(cfg.ctrlPin, HIGH);
       mcp.digitalWrite(cfg.ledPin, HIGH);
     } else {
       mcp.digitalWrite(cfg.ctrlPin, LOW);
       mcp.digitalWrite(cfg.ledPin, LOW);
-      dac.setChannelValue(toDacChannel(cfg.dacChannel), 0);
+      if (dacReady) {
+        dac.setChannelValue(toDacChannel(cfg.dacChannel), 0);
+      }
     }
     return;
   }
@@ -251,8 +267,49 @@ int compToIndex(const String &comp) {
   return -1;
 }
 
+void recoverI2cBus() {
+  // Bit-bang SCL to release a stuck SDA line
+  pinMode(D1, INPUT);
+  pinMode(D2, INPUT_PULLUP);
+  if (digitalRead(D2) == LOW) {
+    LOG_STATE("I2C SDA stuck LOW - sending clock pulses");
+    pinMode(D1, OUTPUT);
+    for (int i = 0; i < 9; i++) {
+      digitalWrite(D1, LOW);
+      delayMicroseconds(5);
+      digitalWrite(D1, HIGH);
+      delayMicroseconds(5);
+    }
+    // Generate STOP condition
+    pinMode(D2, OUTPUT);
+    digitalWrite(D2, LOW);
+    delayMicroseconds(5);
+    digitalWrite(D1, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(D2, HIGH);
+    delayMicroseconds(5);
+  }
+  Wire.begin(D2, D1);
+}
+
 void initializeMcp23017() {
-  mcp.begin_I2C();
+  mcpReady = false;
+  for (uint8_t attempt = 0; attempt < I2C_INIT_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      LOG_STATE("MCP23017 init retry " + String(attempt));
+      recoverI2cBus();
+      delay(100);
+    }
+    if (mcp.begin_I2C()) {
+      mcpReady = true;
+      break;
+    }
+  }
+  if (!mcpReady) {
+    LOG_STATE("MCP23017 init FAILED after retries - restarting");
+    delay(100);
+    ESP.restart();
+  }
 
   mcp.pinMode(M_B0, INPUT_PULLUP);
   mcp.pinMode(M_B1, INPUT_PULLUP);
@@ -280,9 +337,25 @@ void initializeMcp23017() {
 }
 
 void initializeMcp4728() {
-  dac.begin();
-  dac.setChannelValue(MCP4728_CHANNEL_A, 0);
-  dac.setChannelValue(MCP4728_CHANNEL_B, 0);
+  dacReady = false;
+  for (uint8_t attempt = 0; attempt < I2C_INIT_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      LOG_STATE("MCP4728 init retry " + String(attempt));
+      delay(100);
+    }
+    if (dac.begin()) {
+      dacReady = true;
+      break;
+    }
+  }
+  if (!dacReady) {
+    LOG_STATE("MCP4728 init FAILED - dimming unavailable");
+    // Don't restart: relays still work via MCP23017 on/off
+  }
+  if (dacReady) {
+    dac.setChannelValue(MCP4728_CHANNEL_A, 0);
+    dac.setChannelValue(MCP4728_CHANNEL_B, 0);
+  }
 }
 
 void initializeChannelState() {
@@ -294,6 +367,7 @@ void initializeChannelState() {
     pendingStatus[i] = false;
     switchToggled[i] = false;
 
+    lastToggleMs[i] = 0;
     switchPos[i] = mcp.digitalRead(CHANNEL_HW[i].inputPin);
     relayState[i] = (switchPos[i] == LOW) ? 1 : 0;
     relayValue[i] = CHANNEL_HW[i].dimmable ? lastAnalogLevel : 1000;
@@ -302,11 +376,16 @@ void initializeChannelState() {
 }
 
 void readLocalSwitches() {
+  if (!mcpReady) {
+    return;
+  }
+  unsigned long now = millis();
   for (int i = 0; i < NUM_CHANNELS; i++) {
     int newPos = mcp.digitalRead(CHANNEL_HW[i].inputPin);
-    if (newPos != switchPos[i]) {
+    if (newPos != switchPos[i] && (now - lastToggleMs[i] >= SWITCH_DEBOUNCE_MS)) {
       switchPos[i] = newPos;
       switchToggled[i] = true;
+      lastToggleMs[i] = now;
     }
   }
 
@@ -390,7 +469,6 @@ bool sendLinesToMaster(const String *lines, size_t count) {
   client.flush();
   client.stop();
 
-  masterLinked = true;
   lastMasterContactMs = millis();
   resetDiscoveryBackoff();
   LOG_REG("TCP send OK, " + String(count) + " lines");
@@ -438,7 +516,6 @@ void handleUdpAnnouncements() {
 
   if (masterIp != announcedIp) {
     masterIp = announcedIp;
-    masterLinked = false;
     LOG_DISC("Discovered master IP via UDP: " + masterIp.toString());
   }
 

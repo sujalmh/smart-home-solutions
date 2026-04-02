@@ -218,8 +218,10 @@ class WebSocketManager:
         async with self._lock:
             bucket = self._seen.setdefault(server_id, {})
             bucket[client_id] = (ip, now)
-            # A slave_seen also implies the slave is alive
-            self.slave_health.setdefault(server_id, {})[client_id] = True
+            # Only default to online if no explicit health has been reported yet
+            self.slave_health.setdefault(server_id, {}).setdefault(
+                client_id, True
+            )
 
     async def list_seen(self, server_id: str) -> list[dict[str, str]]:
         now = time.monotonic()

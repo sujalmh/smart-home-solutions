@@ -639,6 +639,14 @@ void flushSeen() {
   LOG_DISC("Flushed " + String(seenCount) + " seen entries");
 }
 
+void flushSlaveHealth() {
+  if (connState != CONN_REGISTERED) return;
+  for (size_t i = 0; i < slaveCount; i++) {
+    emitSlaveStatusChanged(slaves[i].id, slaves[i].health == SLAVE_ACTIVE);
+  }
+  LOG_SLAVE("Flushed health for " + String(slaveCount) + " slaves");
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 9: TRANSPORT LAYER (WebSocket)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1348,6 +1356,7 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       emitGatewayRegister();
       connTransition(CONN_REGISTERED, "register_sent");
       flushSeen();
+      flushSlaveHealth();
       // Re-emit registers for NVS-persisted slaves
       for (size_t i = 0; i < slaveCount; i++) {
         emitRegister(slaves[i].id, slaves[i].ip);

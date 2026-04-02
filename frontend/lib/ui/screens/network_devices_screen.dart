@@ -194,13 +194,17 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                       .map(
                         (client) {
                           final c = context.colors;
+                          final gatewayOnline = ref.watch(gatewayStatusProvider(widget.serverId));
                           final slaveOnline = ref.watch(slaveStatusProvider(client.clientId));
-                          final statusLabel = slaveOnline == null
+                          // If gateway is online but slave health is unknown,
+                          // the gateway would have reported it active if it were — treat as offline.
+                          final effectiveOnline = slaveOnline ?? (gatewayOnline == true ? false : null);
+                          final statusLabel = effectiveOnline == null
                               ? 'Unknown'
-                              : (slaveOnline ? 'Online' : 'Offline');
-                          final statusColor = slaveOnline == null
+                              : (effectiveOnline ? 'Online' : 'Offline');
+                          final statusColor = effectiveOnline == null
                               ? c.neutral
-                              : (slaveOnline ? c.online : c.offline);
+                              : (effectiveOnline ? c.online : c.offline);
                           return _DeviceCard(
                             title: 'Slave ${displayId(client.clientId)}',
                             subtitle: 'IP ${client.ip}',
