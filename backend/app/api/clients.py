@@ -11,6 +11,9 @@ from ..schemas.client import ClientCreate, ClientRead
 from ..schemas.switch_module import SwitchModuleRead, SwitchModuleUpdate
 
 
+from ..websocket.server import is_slave_online
+
+
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
@@ -60,6 +63,7 @@ async def list_clients(
                 "server_id": client.server_id,
                 "ip": client.ip,
                 "module_count": module_counts.get(client.client_id, 3),
+                "online": is_slave_online(client.server_id, client.client_id),
             }
         )
         for client in clients

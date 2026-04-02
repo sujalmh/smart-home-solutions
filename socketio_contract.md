@@ -180,6 +180,18 @@ Payload:
 Meaning:
 - Reports a slave seen on the LAN even if unbound.
 
+### slave_status_changed (master -> backend -> client)
+Payload:
+{
+  "serverID": "1234",
+  "clientID": "5678",
+  "online": true
+}
+Meaning:
+- Reports a slave going online (active) or offline (stale/unreachable).
+- Emitted when the master detects missed pings or data timeout.
+- Backend broadcasts this to all connected Flutter clients.
+
 Binding behavior:
 - `drg=` always produces `slave_seen`.
 - `register` is only emitted after `bind_slave`.

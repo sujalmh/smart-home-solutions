@@ -7,12 +7,14 @@ class Client extends Equatable {
   final String serverId;
   final String ip;
   final int moduleCount;
+  final bool? online;
 
   const Client({
     required this.clientId,
     required this.serverId,
     required this.ip,
     required this.moduleCount,
+    this.online,
   });
 
   factory Client.fromJson(Map<String, dynamic> json) {
@@ -22,6 +24,7 @@ class Client extends Equatable {
       ip: json['ip'] as String,
       moduleCount:
           (json['module_count'] as num?)?.toInt() ?? defaultModuleCount,
+      online: json['online'] as bool?,
     );
   }
 
@@ -31,9 +34,10 @@ class Client extends Equatable {
       'server_id': serverId,
       'ip': ip,
       'module_count': moduleCount,
+      'online': online,
     };
   }
 
   @override
-  List<Object?> get props => [clientId, serverId, ip, moduleCount];
+  List<Object?> get props => [clientId, serverId, ip, moduleCount, online];
 }

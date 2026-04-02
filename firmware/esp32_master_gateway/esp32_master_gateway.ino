@@ -88,8 +88,8 @@
 // ═════════════════════════════════════════════════════════════════════════════
 
 // WiFi credentials
-static const char* WIFI_SSID = "Nuron";
-static const char* WIFI_PASS = "mnbvcx12";
+static const char* WIFI_SSID = "SMART";
+static const char* WIFI_PASS = "localhost";
 
 // Backend WebSocket
 static const char* SOCKET_HOST = "smart-home-backend-264081820163.asia-east1.run.app";
@@ -543,6 +543,7 @@ void upsertSlave(const String& id, const String& ip) {
       slaves[idx].health      = SLAVE_ACTIVE;
       slaves[idx].missedPings = 0;
       LOG_SLAVE("ACTIVE clientID=" + id + " (was STALE)");
+      emitSlaveStatusChanged(id, true);
     }
     return;
   }
@@ -742,6 +743,16 @@ void emitResponse(const String& devId, const String& comp,
   if (reqId.length() > 0) doc["reqId"] = reqId;
   LOG_STA("Emit response dev=" + devId + " comp=" + comp);
   wsSendJson("response", doc);
+}
+
+void emitSlaveStatusChanged(const String& clientId, bool online) {
+  DynamicJsonDocument doc(256);
+  doc["serverID"] = SERVER_ID;
+  doc["clientID"] = clientId;
+  doc["online"]   = online;
+  LOG_SLAVE("Emit slave_status_changed client=" + clientId +
+            " online=" + String(online ? "true" : "false"));
+  wsSendJson("slave_status_changed", doc);
 }
 
 void emitGatewayHeartbeat() {
@@ -1397,6 +1408,7 @@ void pingSlaves() {
       if (slaves[i].health == SLAVE_STALE) {
         slaves[i].health = SLAVE_ACTIVE;
         LOG_SLAVE("ACTIVE clientID=" + slaves[i].id + " (ping OK)");
+        emitSlaveStatusChanged(slaves[i].id, true);
       }
     } else {
       slaves[i].missedPings++;
@@ -1405,6 +1417,7 @@ void pingSlaves() {
         slaves[i].health = SLAVE_STALE;
         LOG_SLAVE("STALE clientID=" + slaves[i].id +
                   " reason=missed_pings(" + String(slaves[i].missedPings) + ")");
+        emitSlaveStatusChanged(slaves[i].id, false);
       }
     }
   }
@@ -1419,6 +1432,7 @@ void checkSlaveStale() {
       slaves[i].health = SLAVE_STALE;
       LOG_SLAVE("STALE clientID=" + slaves[i].id +
                 " reason=no_data_" + String(SLAVE_STALE_MS) + "ms");
+      emitSlaveStatusChanged(slaves[i].id, false);
     }
   }
 }

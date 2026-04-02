@@ -30,6 +30,7 @@ from ..websocket.server import (
     emit_gateway_status,
     emit_gateway_unbind,
     is_gateway_connected,
+    is_slave_online,
     list_seen_slaves,
 )
 
@@ -354,6 +355,7 @@ async def bound_devices(
                 "server_id": client.server_id,
                 "ip": client.ip,
                 "module_count": module_counts.get(client.client_id, 3),
+                "online": is_slave_online(normalized_server_id, client.client_id),
             }
         )
         for client in clients

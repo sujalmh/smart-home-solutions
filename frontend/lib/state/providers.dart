@@ -66,6 +66,45 @@ class GatewayStatusNotifier extends StateNotifier<Map<String, bool>> {
   }
 }
 
+// ─── Slave Status Notifier ───────────────────────────────────────────────────
+
+/// Maintains a live map of `{ clientId → online }` for all known slaves.
+///
+/// Stays up-to-date via `slave_status_changed` socket push events.
+class SlaveStatusNotifier extends StateNotifier<Map<String, bool>> {
+  SlaveStatusNotifier({required this.socketClient}) : super({}) {
+    _sub = socketClient.slaveStatus.listen(_onSocketEvent);
+  }
+
+  final SocketClient socketClient;
+  late final StreamSubscription<Map<String, dynamic>> _sub;
+
+  void _onSocketEvent(Map<String, dynamic> data) {
+    final clientId = data['clientID'];
+    if (clientId is! String || clientId.isEmpty) return;
+    final online = data['online'] == true;
+    state = {...state, clientId: online};
+  }
+
+  /// Seed initial slave health from a list of clients (e.g. from /bound API).
+  void seedFromClients(List<Client> clients) {
+    final updated = Map<String, bool>.from(state);
+    for (final c in clients) {
+      // Only seed if we don't already have a live value
+      if (!updated.containsKey(c.clientId) && c.online != null) {
+        updated[c.clientId] = c.online!;
+      }
+    }
+    state = updated;
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
+
 // ─── Providers ───────────────────────────────────────────────────────────────
 
 final appConfigProvider = Provider<AppConfig>((ref) {
@@ -179,6 +218,19 @@ final gatewayStatusNotifierProvider =
 /// Returns `null` while a status has not yet been fetched (shows "Checking").
 final gatewayStatusProvider = Provider.family<bool?, String>((ref, serverId) {
   return ref.watch(gatewayStatusNotifierProvider)[serverId];
+});
+
+final slaveStatusNotifierProvider =
+    StateNotifierProvider<SlaveStatusNotifier, Map<String, bool>>((ref) {
+      return SlaveStatusNotifier(
+        socketClient: ref.watch(socketClientProvider),
+      );
+    });
+
+/// Per-slave online status derived from [slaveStatusNotifierProvider].
+/// Returns `null` if no status is known yet.
+final slaveStatusProvider = Provider.family<bool?, String>((ref, clientId) {
+  return ref.watch(slaveStatusNotifierProvider)[clientId];
 });
 
 final switchModulesProvider =

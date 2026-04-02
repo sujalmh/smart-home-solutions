@@ -129,6 +129,7 @@ class WebSocketManager:
             tuple[str, str], tuple[int, int, int, float, str | None]
         ] = {}
         self.gateway_heartbeats: dict[str, float] = {}
+        self.slave_health: dict[str, dict[str, bool]] = {}
 
     async def add_client(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -165,6 +166,19 @@ class WebSocketManager:
                 "gateway_status_changed",
                 {"serverID": removed_server_id, "online": False},
             )
+            # Mark all slaves of this gateway as offline
+            slave_bucket = self.slave_health.get(removed_server_id, {})
+            for client_id in list(slave_bucket.keys()):
+                if slave_bucket[client_id]:
+                    slave_bucket[client_id] = False
+                    await self.broadcast(
+                        "slave_status_changed",
+                        {
+                            "serverID": removed_server_id,
+                            "clientID": client_id,
+                            "online": False,
+                        },
+                    )
 
     async def broadcast(self, event: str, data: dict) -> None:
         message = _build_message(event, data)
@@ -204,6 +218,8 @@ class WebSocketManager:
         async with self._lock:
             bucket = self._seen.setdefault(server_id, {})
             bucket[client_id] = (ip, now)
+            # A slave_seen also implies the slave is alive
+            self.slave_health.setdefault(server_id, {})[client_id] = True
 
     async def list_seen(self, server_id: str) -> list[dict[str, str]]:
         now = time.monotonic()
@@ -249,6 +265,17 @@ class WebSocketManager:
                         return False
         self._last_update[key] = (mod, stat, val, now, req_id)
         return True
+
+    async def set_slave_health(
+        self, server_id: str, client_id: str, online: bool
+    ) -> None:
+        async with self._lock:
+            self.slave_health.setdefault(server_id, {})[client_id] = online
+
+    def is_slave_online(self, server_id: str, client_id: str) -> bool | None:
+        """Return True/False for known slaves, None if unknown."""
+        bucket = self.slave_health.get(server_id, {})
+        return bucket.get(client_id)
 
     @staticmethod
     def _is_connected(websocket: WebSocket) -> bool:
@@ -332,6 +359,15 @@ def is_seen_recent(server_id: str | None, client_id: str | None) -> bool:
     if not wire_server_id or not wire_client_id:
         return False
     return ws_manager.is_seen_recent(wire_server_id, wire_client_id)
+
+
+def is_slave_online(server_id: str | None, client_id: str | None) -> bool | None:
+    """Return True/False/None for a slave's last known health."""
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return None
+    return ws_manager.is_slave_online(wire_server_id, wire_client_id)
 
 
 async def list_seen_slaves(server_id: str | None) -> list[dict[str, str]]:
@@ -430,6 +466,25 @@ async def _handle_slave_seen(data: dict) -> None:
     if not wire_server_id or not wire_client_id:
         return
     await ws_manager.record_seen(wire_server_id, wire_client_id, ip)
+
+
+async def _handle_slave_status_changed(data: dict) -> None:
+    server_id = data.get("serverID")
+    client_id = data.get("clientID") or data.get("devID")
+    online = data.get("online")
+    if not isinstance(server_id, str) or not isinstance(client_id, str):
+        return
+    if not isinstance(online, bool):
+        return
+    wire_server_id = _strip_prefix(server_id)
+    wire_client_id = _strip_prefix(client_id)
+    if not wire_server_id or not wire_client_id:
+        return
+    await ws_manager.set_slave_health(wire_server_id, wire_client_id, online)
+    await ws_manager.broadcast(
+        "slave_status_changed",
+        {"serverID": wire_server_id, "clientID": wire_client_id, "online": online},
+    )
 
 
 async def _handle_status_event(event: str, data: dict) -> None:
@@ -542,6 +597,8 @@ async def _handle_message(websocket: WebSocket, message: str) -> None:
         await emit_gateway_unbind(data.get("serverID"), data.get("clientID"))
     elif event == "slave_seen":
         await _handle_slave_seen(data)
+    elif event == "slave_status_changed":
+        await _handle_slave_status_changed(data)
     elif event == "gateway_heartbeat":
         await _handle_gateway_heartbeat(data)
 

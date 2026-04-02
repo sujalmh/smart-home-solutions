@@ -177,22 +177,39 @@ class _NetworkDevicesScreenState extends ConsumerState<NetworkDevicesScreen> {
                 if (clients.isEmpty) {
                   return const _EmptySection(message: 'No devices bound yet.');
                 }
+                // Seed slave status from API response for initial load
+                Future.microtask(
+                  () => ref
+                      .read(slaveStatusNotifierProvider.notifier)
+                      .seedFromClients(clients),
+                );
                 return Column(
                   children: clients
                       .map(
-                        (client) => _DeviceCard(
-                          title: 'Slave ${displayId(client.clientId)}',
-                          subtitle: 'IP ${client.ip}',
-                          statusLabel: 'Connected',
-                          onPrimary: () => context.push(
-                            '/switch/${widget.serverId}/${client.clientId}',
-                            extra: {'moduleCount': client.moduleCount},
-                          ),
-                          primaryLabel: 'Control',
-                          onSecondary: () => _requestStatus(client.clientId),
-                          secondaryLabel: 'Refresh',
-                          onOverflow: () => _showUnbindSheet(client.clientId),
-                        ),
+                        (client) {
+                          final c = context.colors;
+                          final slaveOnline = ref.watch(slaveStatusProvider(client.clientId));
+                          final statusLabel = slaveOnline == null
+                              ? 'Unknown'
+                              : (slaveOnline ? 'Online' : 'Offline');
+                          final statusColor = slaveOnline == null
+                              ? c.neutral
+                              : (slaveOnline ? c.online : c.offline);
+                          return _DeviceCard(
+                            title: 'Slave ${displayId(client.clientId)}',
+                            subtitle: 'IP ${client.ip}',
+                            statusLabel: statusLabel,
+                            statusColor: statusColor,
+                            onPrimary: () => context.push(
+                              '/switch/${widget.serverId}/${client.clientId}',
+                              extra: {'moduleCount': client.moduleCount},
+                            ),
+                            primaryLabel: 'Control',
+                            onSecondary: () => _requestStatus(client.clientId),
+                            secondaryLabel: 'Refresh',
+                            onOverflow: () => _showUnbindSheet(client.clientId),
+                          );
+                        },
                       )
                       .toList(),
                 );
@@ -379,6 +396,7 @@ class _DeviceCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String statusLabel;
+  final Color? statusColor;
   final VoidCallback onPrimary;
   final String primaryLabel;
   final VoidCallback? onSecondary;
@@ -389,6 +407,7 @@ class _DeviceCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.statusLabel,
+    this.statusColor,
     required this.onPrimary,
     required this.primaryLabel,
     this.onSecondary,
@@ -430,12 +449,12 @@ class _DeviceCard extends StatelessWidget {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                decoration: AppDecorations.statusChip(c.primary),
+                decoration: AppDecorations.statusChip(statusColor ?? c.primary),
                 child: Text(
                   statusLabel,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: c.primary,
+                    color: statusColor ?? c.primary,
                   ),
                 ),
               ),

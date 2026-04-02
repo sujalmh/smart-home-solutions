@@ -2,8 +2,9 @@
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
 #include <Wire.h>
-#include "mcp4728.h"
-#include "Adafruit_MCP23017.h"
+#include <Adafruit_MCP4728.h>
+#include <Adafruit_MCP23X17.h>
+
 
 // Fixed legacy layout from RoomSwicthControl-old-reference.ino
 // Comp0 -> SW1/FAN       (A7 + DAC1, input B1, LED A2)
@@ -17,11 +18,11 @@
 #endif
 
 #ifndef WIFI_SSID_CFG
-#define WIFI_SSID_CFG "Nuron"
+#define WIFI_SSID_CFG "SMART"
 #endif
 
 #ifndef WIFI_PASS_CFG
-#define WIFI_PASS_CFG "mnbvcx12"
+#define WIFI_PASS_CFG "localhost"
 #endif
 
 // MCP23017 pin aliases (legacy reference)
@@ -94,8 +95,8 @@ static const char *stateNames[] = {
 ESP8266WebServer httpServer(80);
 WiFiUDP udp;
 
-Adafruit_MCP23017 mcp;
-mcp4728 dac = mcp4728(0);
+Adafruit_MCP23X17 mcp;
+Adafruit_MCP4728 dac;
 
 int relayState[NUM_CHANNELS];
 int relayMode[NUM_CHANNELS];
@@ -199,6 +200,10 @@ uint16_t levelToMilliVolts(int index, int level) {
                        CHANNEL_HW[index].maxMv);
 }
 
+MCP4728_channel_t toDacChannel(uint8_t channel) {
+  return channel == 0 ? MCP4728_CHANNEL_A : MCP4728_CHANNEL_B;
+}
+
 void applyChannelOutput(int index) {
   if (index < 0 || index >= NUM_CHANNELS) {
     return;
@@ -211,14 +216,14 @@ void applyChannelOutput(int index) {
         relayValue[index] = readClampedAnalogLevel();
       }
       uint16_t vtg = levelToMilliVolts(index, relayValue[index]);
-      dac.voutWrite(cfg.dacChannel, vtg);
+      dac.setChannelValue(toDacChannel(cfg.dacChannel), vtg);
       delay(5);
       mcp.digitalWrite(cfg.ctrlPin, HIGH);
       mcp.digitalWrite(cfg.ledPin, HIGH);
     } else {
       mcp.digitalWrite(cfg.ctrlPin, LOW);
       mcp.digitalWrite(cfg.ledPin, LOW);
-      dac.voutWrite(cfg.dacChannel, 0);
+      dac.setChannelValue(toDacChannel(cfg.dacChannel), 0);
     }
     return;
   }
@@ -247,14 +252,11 @@ int compToIndex(const String &comp) {
 }
 
 void initializeMcp23017() {
-  mcp.begin();
+  mcp.begin_I2C();
 
-  mcp.pinMode(M_B0, INPUT);
-  mcp.pullUp(M_B0, HIGH);
-  mcp.pinMode(M_B1, INPUT);
-  mcp.pullUp(M_B1, HIGH);
-  mcp.pinMode(M_B2, INPUT);
-  mcp.pullUp(M_B2, HIGH);
+  mcp.pinMode(M_B0, INPUT_PULLUP);
+  mcp.pinMode(M_B1, INPUT_PULLUP);
+  mcp.pinMode(M_B2, INPUT_PULLUP);
 
   mcp.pinMode(M_A0, OUTPUT);
   mcp.pinMode(M_A1, OUTPUT);
@@ -279,13 +281,8 @@ void initializeMcp23017() {
 
 void initializeMcp4728() {
   dac.begin();
-  dac.vdd(3300);
-  dac.setVref(0, 0);
-  dac.setVref(1, 0);
-  dac.setGain(0, 0, 0, 0);
-  dac.setPowerDown(0, 0, 0, 0);
-  dac.voutWrite(0, 0);
-  dac.voutWrite(1, 0);
+  dac.setChannelValue(MCP4728_CHANNEL_A, 0);
+  dac.setChannelValue(MCP4728_CHANNEL_B, 0);
 }
 
 void initializeChannelState() {
@@ -736,7 +733,7 @@ void setup() {
 
   randomSeed(analogRead(A0) ^ micros());
 
-  Wire.begin();
+  Wire.begin(D2, D1);
   initializeMcp23017();
   initializeMcp4728();
   initializeChannelState();

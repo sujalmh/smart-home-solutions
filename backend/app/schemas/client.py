@@ -16,3 +16,4 @@ class ClientRead(BaseModel):
     server_id: str
     ip: str
     module_count: int = 3
+    online: bool | None = None
